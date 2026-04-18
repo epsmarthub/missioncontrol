@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createMentionReplyAndPersist } from "@/lib/server/missioncontrol-db";
+import { dispatchMentionAndPersist } from "@/lib/server/missioncontrol-db";
 
 export async function POST(request: Request) {
   try {
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       agentId: string;
     };
 
-    const { reply, snapshot } = await createMentionReplyAndPersist({
+    const result = await dispatchMentionAndPersist({
       channelId: body.channelId,
       message: body.message,
       agentId: body.agentId,
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       authorType: "user",
     });
 
-    return NextResponse.json({ ...reply, snapshot });
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo resolver la mencion." },

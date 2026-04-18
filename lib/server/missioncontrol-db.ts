@@ -10,7 +10,6 @@ import { AGENT_CLASS_CONFIG } from "@/lib/agent-classes";
 import { buildMeetingMarkdown } from "@/lib/markdown";
 import {
   coordinateAgents,
-  createAgentReply,
   createVoiceSession,
   generateAutomaticStandup,
   getBlockedRadar,
@@ -18,8 +17,11 @@ import {
   getTacticalAssignments,
 } from "@/lib/mission-control";
 import { prisma } from "@/lib/prisma";
+import { sendOpenClawMentionWebhook } from "@/lib/server/openclaw-webhook";
+import { broadcastSnapshotInvalidated } from "@/lib/server/realtime-hub";
 import {
   AgentProfile,
+  AgentClassId,
   AuthorType,
   ChatMessage,
   MeetingSummary,
@@ -71,6 +73,27 @@ function fromTaskStatus(status: TaskStatus): AppTaskStatus {
       return "review";
     case TaskStatus.DONE:
       return "done";
+  }
+}
+
+function toAgentClass(classId: AgentClassId): AgentClass {
+  switch (classId) {
+    case "mage":
+      return AgentClass.MAGE;
+    case "hunter":
+      return AgentClass.HUNTER;
+    case "warrior":
+      return AgentClass.WARRIOR;
+    case "paladin":
+      return AgentClass.PALADIN;
+    case "rogue":
+      return AgentClass.ROGUE;
+    case "bard":
+      return AgentClass.BARD;
+    case "engineer":
+      return AgentClass.ENGINEER;
+    case "summoner":
+      return AgentClass.SUMMONER;
   }
 }
 
@@ -143,6 +166,59 @@ function inferAuthorId(
   );
 
   return agent?.id ?? authorName.toLowerCase().replace(/\s+/g, "-");
+}
+
+function slugifyAgentId(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || `agent-${Date.now()}`;
+}
+
+function normalizeHandle(value: string) {
+  const cleaned = value.trim().replace(/^@+/, "");
+  return `@${cleaned.toLowerCase()}`;
+}
+
+function createDefaultStats(classId: AgentClassId, level = 1) {
+  const levelBonus = Math.max(level - 1, 0);
+
+  switch (classId) {
+    case "mage":
+      return { arcana: 14 + levelBonus, tactics: 11 + levelBonus, strength: 6, agility: 8, support: 13 + levelBonus };
+    case "hunter":
+      return { arcana: 8, tactics: 12 + levelBonus, strength: 8, agility: 14 + levelBonus, support: 9 };
+    case "warrior":
+      return { arcana: 6, tactics: 11 + levelBonus, strength: 15 + levelBonus, agility: 9, support: 8 };
+    case "paladin":
+      return { arcana: 9, tactics: 11 + levelBonus, strength: 13 + levelBonus, agility: 7, support: 14 + levelBonus };
+    case "rogue":
+      return { arcana: 8, tactics: 10 + levelBonus, strength: 8, agility: 15 + levelBonus, support: 8 };
+    case "bard":
+      return { arcana: 10, tactics: 12 + levelBonus, strength: 7, agility: 9, support: 15 + levelBonus };
+    case "engineer":
+      return { arcana: 11 + levelBonus, tactics: 14 + levelBonus, strength: 8, agility: 10, support: 9 };
+    case "summoner":
+      return { arcana: 15 + levelBonus, tactics: 12 + levelBonus, strength: 6, agility: 8, support: 11 + levelBonus };
+  }
+}
+
+export interface UpsertAgentInput {
+  id?: string;
+  name: string;
+  handle: string;
+  classId: AgentClassId;
+  title?: string;
+  level?: number;
+  currentXp?: number;
+  nextLevelXp?: number;
+  specialty?: string;
+  avatarSeed?: string;
+  voice?: string;
+  quote?: string;
+  stats?: Partial<AgentProfile["stats"]>;
 }
 
 export async function getMissionControlSnapshotFromDb(): Promise<MissionControlSnapshot> {
@@ -384,6 +460,11 @@ export async function transitionMissionControlTask(
     });
   });
 
+  broadcastSnapshotInvalidated({
+    reason: "task.transition",
+    entityId: taskId,
+  });
+
   return getMissionControlSnapshotFromDb();
 }
 
@@ -485,6 +566,11 @@ export async function approveMissionControlTask(taskId: string, changedBy: strin
     });
   });
 
+  broadcastSnapshotInvalidated({
+    reason: "task.approve",
+    entityId: taskId,
+  });
+
   return getMissionControlSnapshotFromDb();
 }
 
@@ -528,6 +614,11 @@ export async function claimMissionControlTask(taskId: string, agentId: string, c
     });
   });
 
+  broadcastSnapshotInvalidated({
+    reason: "task.claim",
+    entityId: taskId,
+  });
+
   return getMissionControlSnapshotFromDb();
 }
 
@@ -538,6 +629,7 @@ export async function postMissionControlMessage(input: {
   authorType: AuthorType;
   content: string;
   mentions: string[];
+  broadcast?: boolean;
 }) {
   ensureDatabase();
 
@@ -559,10 +651,17 @@ export async function postMissionControlMessage(input: {
     },
   });
 
+  if (input.broadcast !== false) {
+    broadcastSnapshotInvalidated({
+      reason: "chat.message",
+      channelId: input.channelId,
+    });
+  }
+
   return getMissionControlSnapshotFromDb();
 }
 
-export async function createMentionReplyAndPersist(input: {
+export async function dispatchMentionAndPersist(input: {
   channelId: string;
   message: string;
   agentId: string;
@@ -572,39 +671,55 @@ export async function createMentionReplyAndPersist(input: {
 }) {
   ensureDatabase();
 
-  await postMissionControlMessage({
+  const snapshotAfterMessage = await postMissionControlMessage({
     channelId: input.channelId,
     authorId: input.authorId,
     authorName: input.authorName,
     authorType: input.authorType,
     content: input.message,
     mentions: [input.agentId],
+    broadcast: false,
   });
 
-  const snapshot = await getMissionControlSnapshotFromDb();
-  const reply = await createAgentReply(snapshot, input.message, input.agentId);
-  const channel = await prisma.chatChannel.findUnique({ where: { slug: input.channelId } });
+  const agent = snapshotAfterMessage.agents.find((entry) => entry.id === input.agentId);
+  const requestMessage = snapshotAfterMessage.messages.at(-1);
 
-  if (!channel) {
-    throw new Error(`No existe el canal ${input.channelId}.`);
+  if (!agent || !requestMessage) {
+    throw new Error("No se pudo preparar la mencion para el agente.");
   }
 
-  await prisma.chatMessage.create({
-    data: {
-      id: `msg-${Date.now()}-reply`,
-      channelId: channel.id,
-      authorName: reply.agentName,
-      authorType: "agent",
-      content: reply.reply,
-      mentions: [],
-      createdAt: new Date(),
+  const webhookResult = await sendOpenClawMentionWebhook({
+    eventId: `mention-${requestMessage.id}-${agent.id}`,
+    event: "agent.mentioned",
+    timestamp: new Date().toISOString(),
+    channelId: input.channelId,
+    messageId: requestMessage.id,
+    agent: {
+      id: agent.id,
+      name: agent.name,
     },
+    author: {
+      id: input.authorId,
+      name: input.authorName,
+      type: input.authorType === "system" ? "user" : input.authorType,
+    },
+    content: input.message,
   });
 
-  return {
-    reply,
-    snapshot: await getMissionControlSnapshotFromDb(),
-  };
+  if (webhookResult.delivered) {
+    broadcastSnapshotInvalidated({
+      reason: "chat.mention.forwarded",
+      channelId: input.channelId,
+      entityId: input.agentId,
+    });
+
+    return {
+      delivery: "webhook" as const,
+      snapshot: await getMissionControlSnapshotFromDb(),
+    };
+  }
+
+  throw new Error(`No se pudo entregar la mencion a OpenClaw: ${webhookResult.reason}.`);
 }
 
 export async function coordinateAgentsAndPersist(input: {
@@ -730,6 +845,11 @@ export async function coordinateAgentsAndPersist(input: {
     });
   });
 
+  broadcastSnapshotInvalidated({
+    reason: "agents.coordinate",
+    channelId: input.sourceChannelId,
+  });
+
   return {
     payload,
     snapshot: await getMissionControlSnapshotFromDb(),
@@ -795,6 +915,11 @@ export async function createSummaryAndPersist(input: {
     },
   });
 
+  broadcastSnapshotInvalidated({
+    reason: "summary.create",
+    channelId: input.sourceChannelId,
+  });
+
   return {
     summary,
     snapshot: await getMissionControlSnapshotFromDb(),
@@ -849,6 +974,12 @@ export async function updatePresenceInDb(input: {
     });
   }
 
+  broadcastSnapshotInvalidated({
+    reason: "presence.update",
+    entityId: input.entityId,
+    channelId: input.channelId,
+  });
+
   return getMissionControlSnapshotFromDb();
 }
 
@@ -862,6 +993,11 @@ export async function createVoiceSessionInDb(input: { agentId?: string; channelI
         data: { enabled: false, expiresAt: new Date() },
       });
     }
+
+    broadcastSnapshotInvalidated({
+      reason: "voice.disable",
+      channelId: input.channelId,
+    });
 
     return {
       session: {
@@ -898,8 +1034,145 @@ export async function createVoiceSessionInDb(input: { agentId?: string; channelI
     },
   });
 
+  broadcastSnapshotInvalidated({
+    reason: "voice.enable",
+    channelId: input.channelId ?? "hq-command",
+    entityId: agent.id,
+  });
+
   return {
     session,
+    snapshot: await getMissionControlSnapshotFromDb(),
+  };
+}
+
+export async function createAgentInDb(input: UpsertAgentInput) {
+  ensureDatabase();
+
+  const id = input.id ? slugifyAgentId(input.id) : slugifyAgentId(input.handle || input.name);
+  const handle = normalizeHandle(input.handle || input.name);
+  const level = Math.max(input.level ?? 1, 1);
+  const classLabel = AGENT_CLASS_CONFIG[input.classId].label;
+  const defaultStats = createDefaultStats(input.classId, level);
+
+  await prisma.agentProfile.create({
+    data: {
+      id,
+      name: input.name.trim(),
+      handle,
+      classId: toAgentClass(input.classId),
+      title: input.title?.trim() || classLabel,
+      level,
+      currentXp: Math.max(input.currentXp ?? 0, 0),
+      nextLevelXp: Math.max(input.nextLevelXp ?? 200, 50),
+      specialty: input.specialty?.trim() || AGENT_CLASS_CONFIG[input.classId].rationale,
+      avatarSeed: input.avatarSeed?.trim() || `${id}-portrait`,
+      voice: input.voice?.trim() || "alloy",
+      statsArcana: input.stats?.arcana ?? defaultStats.arcana,
+      statsTactics: input.stats?.tactics ?? defaultStats.tactics,
+      statsStrength: input.stats?.strength ?? defaultStats.strength,
+      statsAgility: input.stats?.agility ?? defaultStats.agility,
+      statsSupport: input.stats?.support ?? defaultStats.support,
+      quote: input.quote?.trim() || `Soy ${input.name.trim()} y estoy listo para la siguiente mision.`,
+    },
+  });
+
+  await prisma.presenceState.create({
+    data: {
+      id: `presence-${id}`,
+      agentId: id,
+      channelId: "hq-command",
+      mode: PresenceMode.ONLINE,
+      typing: false,
+    },
+  });
+
+  broadcastSnapshotInvalidated({
+    reason: "agent.create",
+    entityId: id,
+    channelId: "hq-command",
+  });
+
+  const snapshot = await getMissionControlSnapshotFromDb();
+  return {
+    agentId: id,
+    snapshot,
+  };
+}
+
+export async function updateAgentInDb(agentId: string, input: Partial<UpsertAgentInput>) {
+  ensureDatabase();
+
+  const existing = await prisma.agentProfile.findUnique({ where: { id: agentId } });
+  if (!existing) {
+    throw new Error(`No existe el agente ${agentId}.`);
+  }
+
+  const nextClassId = input.classId ?? fromAgentClass(existing.classId);
+  const nextLevel = Math.max(input.level ?? existing.level, 1);
+  const defaultStats = createDefaultStats(nextClassId, nextLevel);
+
+  await prisma.agentProfile.update({
+    where: { id: agentId },
+    data: {
+      name: input.name?.trim() ?? existing.name,
+      handle: input.handle ? normalizeHandle(input.handle) : existing.handle,
+      classId: input.classId ? toAgentClass(input.classId) : existing.classId,
+      title: input.title?.trim() ?? existing.title,
+      level: nextLevel,
+      currentXp: Math.max(input.currentXp ?? existing.currentXp, 0),
+      nextLevelXp: Math.max(input.nextLevelXp ?? existing.nextLevelXp, 50),
+      specialty: input.specialty?.trim() ?? existing.specialty,
+      avatarSeed: input.avatarSeed?.trim() ?? existing.avatarSeed,
+      voice: input.voice?.trim() ?? existing.voice,
+      statsArcana: input.stats?.arcana ?? existing.statsArcana ?? defaultStats.arcana,
+      statsTactics: input.stats?.tactics ?? existing.statsTactics ?? defaultStats.tactics,
+      statsStrength: input.stats?.strength ?? existing.statsStrength ?? defaultStats.strength,
+      statsAgility: input.stats?.agility ?? existing.statsAgility ?? defaultStats.agility,
+      statsSupport: input.stats?.support ?? existing.statsSupport ?? defaultStats.support,
+      quote: input.quote?.trim() ?? existing.quote,
+    },
+  });
+
+  broadcastSnapshotInvalidated({
+    reason: "agent.update",
+    entityId: agentId,
+    channelId: "hq-command",
+  });
+
+  return {
+    agentId,
+    snapshot: await getMissionControlSnapshotFromDb(),
+  };
+}
+
+export async function deleteAgentInDb(agentId: string) {
+  ensureDatabase();
+
+  const count = await prisma.agentProfile.count();
+  if (count <= 1) {
+    throw new Error("No puedes eliminar el ultimo agente operativo.");
+  }
+
+  const existing = await prisma.agentProfile.findUnique({ where: { id: agentId } });
+  if (!existing) {
+    throw new Error(`No existe el agente ${agentId}.`);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.presenceState.deleteMany({ where: { agentId } });
+    await tx.voiceSession.deleteMany({ where: { voice: existing.voice } });
+    await tx.agentProfile.delete({ where: { id: agentId } });
+  });
+
+  broadcastSnapshotInvalidated({
+    reason: "agent.delete",
+    entityId: agentId,
+    channelId: "hq-command",
+  });
+
+  return {
+    agentId,
     snapshot: await getMissionControlSnapshotFromDb(),
   };
 }

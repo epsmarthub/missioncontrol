@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { generateAutomaticStandup } from "@/lib/mission-control";
@@ -16,6 +17,7 @@ const STORAGE_KEY = "missioncontrol.snapshot.v2";
 interface MissionControlContextValue {
   snapshot: MissionControlSnapshot;
   activeChannelId: string;
+  realtimeStatus: "connecting" | "connected" | "reconnecting";
   setActiveChannelId: (channelId: string) => void;
   moveTask: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
   approveTask: (taskId: string) => Promise<void>;
@@ -36,10 +38,162 @@ export function MissionControlProvider({
 }>) {
   const [snapshot, setSnapshot] = useState<MissionControlSnapshot>(initialSnapshot);
   const [activeChannelId, setActiveChannelId] = useState("hq-command");
+  const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "reconnecting">("connecting");
+  const pollingInFlightRef = useRef(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const pendingRefreshRef = useRef(false);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }, [snapshot]);
+
+  const refreshSnapshot = useCallback(async () => {
+    if (pollingInFlightRef.current) {
+      return;
+    }
+
+    pollingInFlightRef.current = true;
+
+    try {
+      const response = await fetch("/api/snapshot", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as { snapshot?: MissionControlSnapshot };
+      if (payload.snapshot) {
+        setSnapshot(payload.snapshot);
+      }
+    } catch {
+      return;
+    } finally {
+      pollingInFlightRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    let reconnectTimeoutId: number | null = null;
+    let fallbackTimeoutId: number | null = null;
+    let disposed = false;
+
+    const scheduleFallbackRefresh = () => {
+      if (disposed) {
+        return;
+      }
+
+      fallbackTimeoutId = window.setTimeout(() => {
+        if (!document.hidden) {
+          void refreshSnapshot();
+        }
+
+        scheduleFallbackRefresh();
+      }, 30000);
+    };
+
+    const connectWebSocket = () => {
+      if (disposed) {
+        return;
+      }
+
+      setRealtimeStatus(socketRef.current ? "reconnecting" : "connecting");
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
+      socketRef.current = socket;
+
+      socket.addEventListener("open", () => {
+        setRealtimeStatus("connected");
+      });
+
+      socket.addEventListener("message", (event) => {
+        try {
+          const payload = JSON.parse(event.data as string) as { type?: string };
+          if (payload.type !== "snapshot.invalidate") {
+            return;
+          }
+
+          if (document.hidden) {
+            pendingRefreshRef.current = true;
+            return;
+          }
+
+          void refreshSnapshot();
+        } catch {
+          // noop
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (socketRef.current === socket) {
+          socketRef.current = null;
+        }
+
+        if (!disposed) {
+          setRealtimeStatus("reconnecting");
+          reconnectTimeoutId = window.setTimeout(() => {
+            connectWebSocket();
+          }, 1500);
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        try {
+          socket.close();
+        } catch {
+          // noop
+        }
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        if (
+          !socketRef.current ||
+          socketRef.current.readyState === WebSocket.CLOSING ||
+          socketRef.current.readyState === WebSocket.CLOSED
+        ) {
+          connectWebSocket();
+        }
+
+        if (pendingRefreshRef.current) {
+          pendingRefreshRef.current = false;
+        }
+
+        void refreshSnapshot();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    connectWebSocket();
+    fallbackTimeoutId = window.setTimeout(() => {
+      if (!document.hidden) {
+        void refreshSnapshot();
+      }
+      scheduleFallbackRefresh();
+    }, 0);
+
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (reconnectTimeoutId !== null) {
+        window.clearTimeout(reconnectTimeoutId);
+      }
+      if (fallbackTimeoutId !== null) {
+        window.clearTimeout(fallbackTimeoutId);
+      }
+      if (socketRef.current) {
+        try {
+          socketRef.current.close();
+        } catch {
+          // noop
+        }
+        socketRef.current = null;
+      }
+    };
+  }, [refreshSnapshot]);
 
   const moveTask = useCallback(async (taskId: string, nextStatus: TaskStatus) => {
     const response = await fetch(`/api/tasks/${taskId}/transition`, {
@@ -226,6 +380,7 @@ export function MissionControlProvider({
     () => ({
       snapshot,
       activeChannelId,
+      realtimeStatus,
       setActiveChannelId,
       moveTask,
       approveTask,
@@ -239,6 +394,7 @@ export function MissionControlProvider({
       approveTask,
       exportSummary,
       moveTask,
+      realtimeStatus,
       sendMessage,
       snapshot,
       standupMarkdown,

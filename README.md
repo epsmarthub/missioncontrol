@@ -55,6 +55,9 @@ Abre `http://localhost:3000`.
 - `OPENAI_REALTIME_MODEL`: por defecto `gpt-realtime`
 - `OPENAI_TTS_MODEL`: por defecto `gpt-4o-mini-tts`
 - `OPENCLAW_API_KEY`: token Bearer para agentes OpenClaw. En desarrollo usa `missioncontrol-dev-key` por defecto si no lo defines.
+- `OPENCLAW_WEBHOOK_URL`: endpoint receptor de OpenClaw para eventos emitidos por MissionControl
+- `OPENCLAW_WEBHOOK_SECRET`: secret Bearer compartido para firmar el webhook saliente
+- `OPENCLAW_WEBHOOK_TIMEOUT_MS`: timeout del webhook de MissionControl hacia OpenClaw
 - `MISSIONCONTROL_SEED_MODE`: controla la semilla inicial. Usa `base` para 1 usuario + 1 agente o `demo` para poblar toda la maqueta.
 
 Variables opcionales si mantienes Supabase:
@@ -143,6 +146,11 @@ npm run db:seed
 npm run build
 npm run start
 ```
+
+Nota:
+
+- el arranque productivo ahora usa un custom server Node para soportar WebSocket en `/ws`;
+- si algun dia pones Nginx o Apache delante, debes permitir `Upgrade` y `Connection: upgrade` para WebSocket.
 
 Si quieres dejarlo persistente como servicio del sistema, usa el template:
 

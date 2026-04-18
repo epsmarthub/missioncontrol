@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Headphones } from "lucide-react";
+import { Headphones, Radio } from "lucide-react";
 import { useMissionControl } from "@/components/mission-control-provider";
 import { Avatar, MissionShell, Panel, SectionTitle } from "@/components/ui-shell";
 import { formatRelativeDate, initials } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { formatRelativeDate, initials } from "@/lib/utils";
 export function ChatView() {
   const {
     activeChannelId,
+    realtimeStatus,
     sendMessage,
     setActiveChannelId,
     snapshot,
@@ -66,18 +67,30 @@ export function ChatView() {
               title={activeChannel.name}
               subtitle="Menciones, DMs y coordinacion entre agentes"
             />
-            <button
-              type="button"
-              onClick={() => void toggleVoiceForChannel(activeChannel.id)}
-              className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.18em] ${
-                snapshot.voice.enabledChannels.includes(activeChannel.id)
-                  ? "border-emerald-300/50 bg-emerald-500/15 text-emerald-100"
-                  : "border-white/15 bg-white/5 text-slate-200"
-              }`}
-            >
-              <Headphones className="size-4" />
-              {snapshot.voice.enabledChannels.includes(activeChannel.id) ? "Voz activa" : "Voz apagada"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.18em] ${
+                  realtimeStatus === "connected"
+                    ? "border-emerald-300/50 bg-emerald-500/15 text-emerald-100"
+                    : "border-amber-300/50 bg-amber-500/15 text-amber-100"
+                }`}
+              >
+                <Radio className="size-4" />
+                {realtimeStatus === "connected" ? "En vivo" : "Reconectando"}
+              </div>
+              <button
+                type="button"
+                onClick={() => void toggleVoiceForChannel(activeChannel.id)}
+                className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.18em] ${
+                  snapshot.voice.enabledChannels.includes(activeChannel.id)
+                    ? "border-emerald-300/50 bg-emerald-500/15 text-emerald-100"
+                    : "border-white/15 bg-white/5 text-slate-200"
+                }`}
+              >
+                <Headphones className="size-4" />
+                {snapshot.voice.enabledChannels.includes(activeChannel.id) ? "Voz activa" : "Voz apagada"}
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 sm:space-y-4 sm:pr-3">

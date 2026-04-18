@@ -2,14 +2,18 @@ import {
   approveMissionControlTask,
   claimMissionControlTask,
   coordinateAgentsAndPersist,
-  createMentionReplyAndPersist,
+  createAgentInDb,
   createSummaryAndPersist,
   createVoiceSessionInDb,
+  deleteAgentInDb,
+  dispatchMentionAndPersist,
   getMissionControlDashboardFromDb,
   getMissionControlSnapshotFromDb,
   postMissionControlMessage,
   transitionMissionControlTask,
+  updateAgentInDb,
   updatePresenceInDb,
+  UpsertAgentInput,
 } from "@/lib/server/missioncontrol-db";
 import { AuthorType, PresenceMode, TaskStatus } from "@/lib/types";
 
@@ -44,6 +48,33 @@ export async function getOpenClawAgent(agentId: string) {
   }
 
   return agent;
+}
+
+export async function createOpenClawAgent(input: UpsertAgentInput) {
+  const { agentId, snapshot } = await createAgentInDb(input);
+  return {
+    ok: true,
+    agent: snapshot.agents.find((entry) => entry.id === agentId),
+    snapshot,
+  };
+}
+
+export async function updateOpenClawAgent(agentId: string, input: Partial<UpsertAgentInput>) {
+  const { snapshot } = await updateAgentInDb(agentId, input);
+  return {
+    ok: true,
+    agent: snapshot.agents.find((entry) => entry.id === agentId),
+    snapshot,
+  };
+}
+
+export async function deleteOpenClawAgent(agentId: string) {
+  const { snapshot } = await deleteAgentInDb(agentId);
+  return {
+    ok: true,
+    deletedAgentId: agentId,
+    snapshot,
+  };
 }
 
 export async function getOpenClawAgentContext(agentId: string) {
@@ -164,7 +195,7 @@ export async function createOpenClawMention(input: {
   content: string;
   agentId: string;
 }) {
-  const { reply, snapshot } = await createMentionReplyAndPersist({
+  const result = await dispatchMentionAndPersist({
     channelId: input.channelId,
     message: input.content,
     agentId: input.agentId,
@@ -175,10 +206,10 @@ export async function createOpenClawMention(input: {
 
   return {
     ok: true,
-    reply,
-    requestMessage: snapshot.messages.at(-2),
-    replyMessage: snapshot.messages.at(-1),
-    snapshot,
+    delivery: result.delivery,
+    requestMessage: result.snapshot.messages.at(-1),
+    replyMessage: result.delivery === "webhook" ? undefined : result.snapshot.messages.at(-1),
+    snapshot: result.snapshot,
   };
 }
 
