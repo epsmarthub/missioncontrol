@@ -1,9 +1,15 @@
 ---
 name: missioncontrol-openclaw-api
-description: Use when an OpenClaw agent needs to call the current MissionControl API for agents, tasks, summaries, presence, voice, dashboard, and snapshot. This version no longer includes chat, channels, coordination, or webhook flows.
+description: Use when an OpenClaw agent needs to call the current MissionControl API for adventurers, missions, summaries, presence, voice, dashboard, and snapshot. This version no longer includes chat, channels, coordination, or webhook flows.
 ---
 
 # MissionControl OpenClaw API
+
+Nota de vocabulario:
+
+- en la UI de MissionControl, `agentes` ahora se muestran como `aventureros`;
+- en la UI de MissionControl, `tareas` ahora se muestran como `misiones`;
+- los nombres tecnicos de la API no cambian: los endpoints siguen usando `agents` y `tasks`.
 
 ## Usar esta skill cuando
 
@@ -16,8 +22,8 @@ description: Use when an OpenClaw agent needs to call the current MissionControl
 MissionControl ya no incluye:
 
 - chat interno;
-- canales y mensajes para agentes;
-- coordinacion entre agentes via MissionControl;
+- canales y mensajes para aventureros;
+- coordinacion entre aventureros via MissionControl;
 - webhook de menciones.
 
 Por tanto, esta skill ya no usa ni documenta:
@@ -56,7 +62,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
   http://127.0.0.1:3000/api/openclaw/health
 ```
 
-## Agentes disponibles por defecto
+## Aventureros disponibles por defecto
 
 En seed `base`:
 
@@ -86,7 +92,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/snapshot`
 
-Devuelve el snapshot completo de MissionControl: usuario, agentes, tareas, summaries, voz y presencia.
+Devuelve el snapshot completo de MissionControl: usuario, aventureros, misiones, summaries, voz y presencia.
 
 Usalo cuando el agente necesite una foto global del sistema.
 
@@ -106,11 +112,11 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
   http://127.0.0.1:3000/api/openclaw/dashboard
 ```
 
-## 2. Agentes
+## 2. Aventureros
 
 ### `GET /api/openclaw/agents`
 
-Lista todos los agentes con clase, nivel, voz y stats.
+Lista todos los aventureros con clase, nivel, voz y stats.
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
@@ -119,7 +125,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/agents/:agentId`
 
-Devuelve el perfil de un agente concreto.
+Devuelve el perfil de un aventurero concreto.
 
 Ejemplo con `jarvis`:
 
@@ -130,15 +136,15 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/agents/:agentId/context`
 
-Devuelve el contexto operativo de un agente:
+Devuelve el contexto operativo de un aventurero:
 
 - perfil;
-- tareas asignadas;
+- misiones asignadas;
 - presencia;
 - summaries relacionados;
 - policy flags.
 
-Es la llamada principal para que un agente OpenClaw sepa que tiene pendiente.
+Es la llamada principal para que un aventurero OpenClaw sepa que tiene pendiente.
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
@@ -148,7 +154,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `POST /api/openclaw/agents`
 
-Crea un nuevo agente.
+Crea un nuevo aventurero.
 
 Campos recomendados:
 
@@ -184,7 +190,7 @@ curl -X POST \
 
 ### `PATCH /api/openclaw/agents/:agentId`
 
-Actualiza un agente existente.
+Actualiza un aventurero existente.
 
 ```bash
 curl -X PATCH \
@@ -200,7 +206,7 @@ curl -X PATCH \
 
 ### `DELETE /api/openclaw/agents/:agentId`
 
-Elimina un agente. MissionControl protege el ultimo agente operativo.
+Elimina un aventurero. MissionControl protege el ultimo aventurero operativo.
 
 ```bash
 curl -X DELETE \
@@ -209,20 +215,20 @@ curl -X DELETE \
   http://127.0.0.1:3000/api/openclaw/agents/alaric
 ```
 
-## 3. Tareas
+## 3. Misiones
 
 ### `GET /api/openclaw/tasks`
 
-Lista todas las tareas del tablero.
+Lista todas las misiones del tablero.
 
-Por defecto no devuelve tareas `closed`.
+Por defecto no devuelve misiones `closed`.
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
   http://127.0.0.1:3000/api/openclaw/tasks
 ```
 
-Consultar tareas cerradas:
+Consultar misiones cerradas:
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
@@ -238,7 +244,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `POST /api/openclaw/tasks`
 
-Crea una tarea nueva.
+Crea una mision nueva.
 
 Campos requeridos:
 
@@ -272,7 +278,7 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "title":"Preparar tablero semanal",
-    "description":"Crear el lote inicial de tareas operativas de la semana.",
+    "description":"Crear el lote inicial de misiones operativas de la semana.",
     "priority":"high",
     "difficulty":"critical",
     "requiresApproval":true,
@@ -284,10 +290,10 @@ curl -X POST \
 
 ### `GET /api/openclaw/tasks/:taskId`
 
-Devuelve el contexto completo de una tarea:
+Devuelve el contexto completo de una mision:
 
-- tarea;
-- agentes asignados;
+- mision;
+- aventureros asignados;
 - historial;
 - XP relacionado.
 
@@ -300,7 +306,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `POST /api/openclaw/tasks/:taskId/claim`
 
-Asigna un agente adicional a la tarea.
+Asigna un aventurero adicional a la mision.
 
 ```bash
 curl -X POST \
@@ -314,7 +320,7 @@ curl -X POST \
 
 ### `POST /api/openclaw/tasks/:taskId/transition`
 
-Cambia el estado de una tarea.
+Cambia el estado de una mision.
 
 Valores permitidos para `nextStatus`:
 
@@ -324,8 +330,8 @@ Valores permitidos para `nextStatus`:
 - `done`
 - `closed`
 
-Si la tarea requiere aprobacion y la mandas a `done`, MissionControl la deja en `review`.
-Una tarea solo puede pasar a `closed` si ya esta en `done`.
+Si la mision requiere aprobacion y la mandas a `done`, MissionControl la deja en `review`.
+Una mision solo puede pasar a `closed` si ya esta en `done`.
 
 ```bash
 curl -X POST \
@@ -339,7 +345,7 @@ curl -X POST \
 
 ### `POST /api/openclaw/tasks/:taskId/approve`
 
-Aprueba el cierre final de una tarea y dispara:
+Aprueba el cierre final de una mision y dispara:
 
 - cambio a `done`;
 - creacion de eventos XP;
@@ -420,7 +426,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/presence`
 
-Devuelve el estado de presencia de usuarios y agentes.
+Devuelve el estado de presencia de usuarios y aventureros.
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
@@ -506,13 +512,13 @@ curl -X POST \
 
 ## Secuencias recomendadas
 
-### Flujo: agente toma contexto y avanza tarea
+### Flujo: aventurero toma contexto y avanza mision
 
 1. `GET /api/openclaw/agents/:agentId/context`
 2. `GET /api/openclaw/tasks/:taskId`
 3. `POST /api/openclaw/tasks/:taskId/transition`
 
-### Flujo: crear y cerrar tareas
+### Flujo: crear y cerrar misiones
 
 1. `POST /api/openclaw/tasks`
 2. `POST /api/openclaw/tasks/:taskId/transition`
@@ -524,7 +530,7 @@ curl -X POST \
 1. `GET /api/openclaw/standup`
 2. `POST /api/openclaw/summaries`
 
-### Flujo: gestionar roster de agentes
+### Flujo: gestionar roster de aventureros
 
 1. `GET /api/openclaw/agents`
 2. `POST /api/openclaw/agents`
@@ -536,7 +542,7 @@ curl -X POST \
 - si falta `Authorization`, la API responde error;
 - si falta `Idempotency-Key` en escritura, la API rechaza la llamada;
 - la API ya no ofrece chat ni coordinacion interna;
-- las tareas `closed` no salen en el tablero ni en el snapshot normal;
-- para ver tareas cerradas usa `GET /api/openclaw/tasks?status=closed`;
-- para conversaciones con agentes usa tu canal externo, por ejemplo Telegram;
-- MissionControl queda como centro de control operativo: tareas, agentes, resumenes, presencia y voz.
+- las misiones `closed` no salen en el tablero ni en el snapshot normal;
+- para ver misiones cerradas usa `GET /api/openclaw/tasks?status=closed`;
+- para conversaciones con aventureros usa tu canal externo, por ejemplo Telegram;
+- MissionControl queda como centro de control operativo: misiones, aventureros, resumenes, presencia y voz.

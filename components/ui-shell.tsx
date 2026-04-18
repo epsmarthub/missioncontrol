@@ -31,7 +31,7 @@ const navItems: Array<{
 }> = [
   { id: "hq", href: "/", label: "Centro HQ", icon: Castle },
   { id: "task-board", href: "/task-board", label: "Tablero", icon: ClipboardList },
-  { id: "agents", href: "/agents", label: "Agentes", icon: Swords },
+  { id: "agents", href: "/agents", label: "Aventureros", icon: Swords },
   {
     id: "meeting-summaries",
     href: "/meeting-summaries",
@@ -79,7 +79,7 @@ export function MissionShell({
               HQ 16-bit
             </h1>
             <p className="mt-2 max-w-[18ch] font-mono text-xs leading-5 text-slate-300 sm:max-w-none sm:text-sm">
-              Centro tactico para agentes, tareas y reuniones.
+              Centro tactico para aventureros, misiones y reuniones.
             </p>
           </div>
 

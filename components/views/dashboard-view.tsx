@@ -22,8 +22,8 @@ export function DashboardView() {
         <Panel>
           <SectionTitle title="Radar HQ" subtitle="Estado actual de la operacion" />
           <div className="mt-3 grid gap-2.5 md:grid-cols-3">
-            <StatCard title="Tareas" value={String(stats.totalTasks)} description="carga total" />
-            <StatCard title="Hechas" value={String(stats.completedTasks)} description="misiones cerradas" />
+            <StatCard title="Misiones" value={String(stats.totalTasks)} description="carga total" />
+            <StatCard title="Cumplidas" value={String(stats.completedTasks)} description="misiones cerradas" />
             <StatCard title="Revision" value={String(stats.inReview)} description="esperando supervisor" />
           </div>
           <div className="mt-3 grid gap-2.5 lg:grid-cols-2">
@@ -52,7 +52,7 @@ export function DashboardView() {
           <div className="mt-3 space-y-2.5">
             <MiniFeature
               title="Radar de bloqueos"
-              body="Encuentra tareas estancadas, revisiones vencidas y agentes sin avance."
+              body="Encuentra misiones estancadas, revisiones vencidas y aventureros sin avance."
               icon={<Radar className="size-5 text-cyan-200" />}
             />
             <MiniFeature
@@ -69,7 +69,7 @@ export function DashboardView() {
         </Panel>
 
         <Panel className="xl:col-span-2">
-          <SectionTitle title="Agentes en campana" subtitle="Clases, stats y especialidades" />
+          <SectionTitle title="Aventureros en campana" subtitle="Clases, stats y especialidades" />
           <div className="mt-3 grid gap-2.5 md:grid-cols-3">
             {snapshot.agents.map((agent) => (
               <AgentCard key={agent.id} agent={agent} compact />

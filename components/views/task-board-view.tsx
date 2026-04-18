@@ -20,7 +20,7 @@ export function TaskBoardView() {
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
 
   return (
-    <MissionShell title="Tablero de tareas">
+    <MissionShell title="Tablero de misiones">
       <div className="grid gap-3 xl:grid-cols-4">
         {(["backlog", "in_progress", "review", "done"] as TaskStatus[]).map((status) => (
           <Panel
@@ -31,7 +31,7 @@ export function TaskBoardView() {
           >
             <SectionTitle
               title={labels[status]}
-              subtitle={`${snapshot.tasks.filter((task) => task.status === status).length} tareas`}
+              subtitle={`${snapshot.tasks.filter((task) => task.status === status).length} misiones`}
             />
             <div
               className={`mt-3 min-h-[320px] space-y-3 rounded-[16px] transition-colors ${
@@ -76,7 +76,7 @@ export function TaskBoardView() {
                 ))}
               {snapshot.tasks.filter((task) => task.status === status).length === 0 ? (
                 <div className="rounded-[18px] border border-dashed border-white/10 bg-white/5 px-3 py-4 font-mono text-xs text-slate-400">
-                  Sin tareas en esta columna.
+                  Sin misiones en esta columna.
                 </div>
               ) : null}
             </div>
