@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPERVISOR
+  OPERATOR
+}
+
+enum AgentClass {
+  MAGE
+  HUNTER
+  WARRIOR
+  PALADIN
+  ROGUE
+  BARD
+  ENGINEER
+  SUMMONER
+}
+
+enum TaskStatus {
+  BACKLOG
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+  DM
+  SUMMARY
+}
+
+enum PresenceMode {
+  ONLINE
+  FOCUS
+  AWAY
+  IN_VOICE
+}
+
+model User {
+  id        String          @id @default(cuid())
+  email     String          @unique
+  name      String
+  handle    String          @unique
+  role      UserRole        @default(OPERATOR)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  messages  ChatMessage[]
+  presence  PresenceState[]
+}
+
+model AgentProfile {
+  id            String           @id @default(cuid())
+  name          String
+  handle        String           @unique
+  classId       AgentClass
+  title         String
+  level         Int              @default(1)
+  currentXp     Int              @default(0)
+  nextLevelXp   Int              @default(200)
+  specialty     String
+  avatarSeed    String
+  voice         String           @default("alloy")
+  statsArcana   Int
+  statsTactics  Int
+  statsStrength Int
+  statsAgility  Int
+  statsSupport  Int
+  quote         String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  assignments   TaskAssignment[]
+  xpEvents      XpEvent[]
+  presence      PresenceState[]
+}
+
+model Task {
+  id                String              @id @default(cuid())
+  title             String
+  description       String
+  status            TaskStatus          @default(BACKLOG)
+  priority          TaskPriority        @default(MEDIUM)
+  tags              String[]            @default([])
+  xpReward          Int                 @default(50)
+  requiresApproval  Boolean             @default(false)
+  dueAt             DateTime
+  reviewRequestedAt DateTime?
+  completedAt       DateTime?
+  approvedAt        DateTime?
+  blockedReason     String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  assignments       TaskAssignment[]
+  history           TaskStatusHistory[]
+  xpEvents          XpEvent[]
+}
+
+model TaskAssignment {
+  id        String       @id @default(cuid())
+  taskId    String
+  agentId   String
+  createdAt DateTime     @default(now())
+  task      Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent     AgentProfile @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, agentId])
+}
+
+model TaskStatusHistory {
+  id         String     @id @default(cuid())
+  taskId      String
+  fromStatus  TaskStatus
+  toStatus    TaskStatus
+  changedBy   String
+  changedAt   DateTime   @default(now())
+  task        Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model XpEvent {
+  id         String       @id @default(cuid())
+  taskId     String
+  agentId    String
+  amount     Int
+  reason     String
+  createdAt  DateTime     @default(now())
+  task       Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent      AgentProfile @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model ChatChannel {
+  id          String         @id @default(cuid())
+  name        String
+  slug        String         @unique
+  type        ChannelType    @default(PUBLIC)
+  description String
+  createdAt   DateTime       @default(now())
+  messages    ChatMessage[]
+  summaries   MeetingSummary[]
+  presence    PresenceState[]
+}
+
+model ChatMessage {
+  id         String      @id @default(cuid())
+  channelId   String
+  userId      String?
+  authorName  String
+  authorType  String
+  content     String
+  mentions    String[]
+  createdAt   DateTime    @default(now())
+  channel     ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model DirectThread {
+  id              String   @id @default(cuid())
+  sourceChannelId String
+  agentAId        String
+  agentBId        String
+  topic           String
+  summaryId       String?
+  createdAt       DateTime @default(now())
+}
+
+model MeetingSummary {
+  id              String      @id @default(cuid())
+  title           String
+  sourceChannelId String
+  threadId        String?
+  participants    String[]
+  highlights      String[]
+  markdown        String
+  createdAt       DateTime    @default(now())
+  sourceChannel   ChatChannel @relation(fields: [sourceChannelId], references: [id], onDelete: Cascade)
+}
+
+model VoiceSession {
+  id        String   @id @default(cuid())
+  channelId String
+  userId    String?
+  enabled   Boolean  @default(false)
+  provider  String
+  model     String
+  voice     String
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+}
+
+model PresenceState {
+  id        String        @id @default(cuid())
+  userId    String?
+  agentId   String?
+  channelId String?
+  mode      PresenceMode  @default(ONLINE)
+  typing    Boolean       @default(false)
+  updatedAt DateTime      @updatedAt
+  user      User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent     AgentProfile? @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  channel   ChatChannel?  @relation(fields: [channelId], references: [id], onDelete: SetNull)
+}
