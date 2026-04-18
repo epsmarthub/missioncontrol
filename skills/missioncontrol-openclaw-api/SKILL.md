@@ -1,6 +1,6 @@
 ---
 name: missioncontrol-openclaw-api
-description: Use when an OpenClaw agent needs to call the MissionControl API. Explains every OpenClaw endpoint, required headers, when to use it, and includes a request example for each route.
+description: Use when an OpenClaw agent needs to call the current MissionControl API for agents, tasks, summaries, presence, voice, dashboard, and snapshot. This version no longer includes chat, channels, coordination, or webhook flows.
 ---
 
 # MissionControl OpenClaw API
@@ -8,36 +8,45 @@ description: Use when an OpenClaw agent needs to call the MissionControl API. Ex
 ## Usar esta skill cuando
 
 - un agente OpenClaw necesite leer o escribir en MissionControl;
-- quieras saber que hace cada endpoint del namespace `/api/openclaw/*`;
+- quieras saber que hace cada endpoint vigente del namespace `/api/openclaw/*`;
 - necesites ejemplos listos de request por cada llamada.
+
+## Importante: cambios de esta version
+
+MissionControl ya no incluye:
+
+- chat interno;
+- canales y mensajes para agentes;
+- coordinacion entre agentes via MissionControl;
+- webhook de menciones.
+
+Por tanto, esta skill ya no usa ni documenta:
+
+- `GET /api/openclaw/channels`
+- `GET /api/openclaw/channels/:channelId/messages`
+- `POST /api/openclaw/chat/post`
+- `POST /api/openclaw/chat/mention`
+- `POST /api/openclaw/coordinate`
 
 ## Base URL
 
 Asume:
 
-```text
-http://127.0.0.1:3000
-```
+`http://127.0.0.1:3000`
 
 ## Headers comunes
 
 Todos los endpoints de OpenClaw requieren:
 
-```http
-Authorization: Bearer <OPENCLAW_API_KEY>
-```
+`Authorization: Bearer <OPENCLAW_API_KEY>`
 
 Para llamadas hechas por un agente en particular, envia tambien:
 
-```http
-X-OpenClaw-Agent-Id: <agentId>
-```
+`X-OpenClaw-Agent-Id: <agentId>`
 
 Para cualquier escritura, envia tambien:
 
-```http
-Idempotency-Key: <uuid-unico>
-```
+`Idempotency-Key: <uuid-unico>`
 
 Ejemplo base:
 
@@ -48,6 +57,12 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 ```
 
 ## Agentes disponibles por defecto
+
+En seed `base`:
+
+- `jarvis`
+
+En seed `demo`:
 
 - `jarvis`
 - `alaria`
@@ -62,7 +77,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/health`
 
-Sirve para validar que la API esta arriba y que el store compartido de MissionControl responde.
+Sirve para validar que la API esta arriba y que MissionControl responde.
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
@@ -71,7 +86,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/snapshot`
 
-Devuelve el snapshot completo de MissionControl: usuario, agentes, tareas, canales, mensajes, resumentes, voz y presencia.
+Devuelve el snapshot completo de MissionControl: usuario, agentes, tareas, summaries, voz y presencia.
 
 Usalo cuando el agente necesite una foto global del sistema.
 
@@ -82,7 +97,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/dashboard`
 
-Devuelve el resumen de panel: stats, radar de bloqueos, sugerencias tacticas, stand-up y tareas agrupadas por carril.
+Devuelve el resumen de panel: stats, radar de bloqueos, sugerencias tacticas y stand-up.
 
 Usalo para decidir prioridades sin bajar todo el snapshot.
 
@@ -119,8 +134,6 @@ Devuelve el contexto operativo de un agente:
 
 - perfil;
 - tareas asignadas;
-- canales activos;
-- mensajes recientes relacionados;
 - presencia;
 - summaries relacionados;
 - policy flags.
@@ -133,14 +146,139 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
   http://127.0.0.1:3000/api/openclaw/agents/jarvis/context
 ```
 
+### `POST /api/openclaw/agents`
+
+Crea un nuevo agente.
+
+Campos recomendados:
+
+- `name`
+- `handle`
+- `classId`
+
+Campos opcionales:
+
+- `title`
+- `level`
+- `specialty`
+- `voice`
+- `quote`
+- `avatarSeed`
+- `stats`
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer missioncontrol-dev-key" \
+  -H "Idempotency-Key: create-agent-alaric-001" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name":"Alaric",
+    "handle":"@alaric",
+    "classId":"paladin",
+    "title":"Paladin de Guardia",
+    "specialty":"Aprobaciones y calidad",
+    "voice":"alloy"
+  }' \
+  http://127.0.0.1:3000/api/openclaw/agents
+```
+
+### `PATCH /api/openclaw/agents/:agentId`
+
+Actualiza un agente existente.
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer missioncontrol-dev-key" \
+  -H "Idempotency-Key: update-agent-jarvis-001" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title":"Arquitecto de Automatizaciones",
+    "specialty":"Planeacion, tooling y supervisión de tareas"
+  }' \
+  http://127.0.0.1:3000/api/openclaw/agents/jarvis
+```
+
+### `DELETE /api/openclaw/agents/:agentId`
+
+Elimina un agente. MissionControl protege el ultimo agente operativo.
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer missioncontrol-dev-key" \
+  -H "Idempotency-Key: delete-agent-alaric-001" \
+  http://127.0.0.1:3000/api/openclaw/agents/alaric
+```
+
 ## 3. Tareas
 
 ### `GET /api/openclaw/tasks`
 
 Lista todas las tareas del tablero.
 
+Por defecto no devuelve tareas `closed`.
+
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
+  http://127.0.0.1:3000/api/openclaw/tasks
+```
+
+Consultar tareas cerradas:
+
+```bash
+curl -H "Authorization: Bearer missioncontrol-dev-key" \
+  "http://127.0.0.1:3000/api/openclaw/tasks?status=closed"
+```
+
+Consultar todas incluyendo cerradas:
+
+```bash
+curl -H "Authorization: Bearer missioncontrol-dev-key" \
+  "http://127.0.0.1:3000/api/openclaw/tasks?includeClosed=true"
+```
+
+### `POST /api/openclaw/tasks`
+
+Crea una tarea nueva.
+
+Campos requeridos:
+
+- `title`
+- `description`
+
+Campos opcionales:
+
+- `priority`
+- `difficulty`
+- `requiresApproval`
+- `assignedAgentIds`
+- `tags`
+- `dueAt`
+- `blockedReason`
+
+Si no envias `difficulty`, MissionControl usa `priority` como dificultad.
+
+XP por dificultad:
+
+- `low` = `40`
+- `medium` = `80`
+- `high` = `140`
+- `critical` = `220`
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer missioncontrol-dev-key" \
+  -H "X-OpenClaw-Agent-Id: jarvis" \
+  -H "Idempotency-Key: create-task-001" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title":"Preparar tablero semanal",
+    "description":"Crear el lote inicial de tareas operativas de la semana.",
+    "priority":"high",
+    "difficulty":"critical",
+    "requiresApproval":true,
+    "assignedAgentIds":["jarvis"],
+    "tags":["ops","weekly"]
+  }' \
   http://127.0.0.1:3000/api/openclaw/tasks
 ```
 
@@ -164,15 +302,13 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 Asigna un agente adicional a la tarea.
 
-Usalo cuando un agente quiera sumarse formalmente a un frente.
-
 ```bash
 curl -X POST \
   -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: omen" \
+  -H "X-OpenClaw-Agent-Id: jarvis" \
   -H "Idempotency-Key: claim-task-voice-optin-001" \
   -H "Content-Type: application/json" \
-  -d '{"agentId":"omen"}' \
+  -d '{"agentId":"jarvis"}' \
   http://127.0.0.1:3000/api/openclaw/tasks/task-voice-optin/claim
 ```
 
@@ -186,13 +322,15 @@ Valores permitidos para `nextStatus`:
 - `in_progress`
 - `review`
 - `done`
+- `closed`
 
 Si la tarea requiere aprobacion y la mandas a `done`, MissionControl la deja en `review`.
+Una tarea solo puede pasar a `closed` si ya esta en `done`.
 
 ```bash
 curl -X POST \
   -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: forge" \
+  -H "X-OpenClaw-Agent-Id: jarvis" \
   -H "Idempotency-Key: transition-task-ops-map-001" \
   -H "Content-Type: application/json" \
   -d '{"nextStatus":"review"}' \
@@ -207,114 +345,15 @@ Aprueba el cierre final de una tarea y dispara:
 - creacion de eventos XP;
 - posible subida de nivel.
 
-Usalo para tareas en review o para aprobacion final de supervisor.
-
 ```bash
 curl -X POST \
   -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: serapha" \
+  -H "X-OpenClaw-Agent-Id: jarvis" \
   -H "Idempotency-Key: approve-task-supervisor-guard-001" \
   http://127.0.0.1:3000/api/openclaw/tasks/task-supervisor-guard/approve
 ```
 
-## 4. Canales y mensajes
-
-### `GET /api/openclaw/channels`
-
-Lista todos los canales y cuantos mensajes tiene cada uno.
-
-```bash
-curl -H "Authorization: Bearer missioncontrol-dev-key" \
-  http://127.0.0.1:3000/api/openclaw/channels
-```
-
-### `GET /api/openclaw/channels/:channelId/messages`
-
-Devuelve los mensajes de un canal.
-
-Puedes usar `?limit=20`.
-
-```bash
-curl -H "Authorization: Bearer missioncontrol-dev-key" \
-  "http://127.0.0.1:3000/api/openclaw/channels/hq-command/messages?limit=20"
-```
-
-### `POST /api/openclaw/chat/post`
-
-Publica un mensaje normal en un canal.
-
-Campo opcional:
-
-- `mentions`: lista de agentes mencionados.
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: jarvis" \
-  -H "Idempotency-Key: post-hq-command-001" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channelId":"hq-command",
-    "content":"Jarvis reporta que la tarea paso a review.",
-    "mentions":["serapha"]
-  }' \
-  http://127.0.0.1:3000/api/openclaw/chat/post
-```
-
-### `POST /api/openclaw/chat/mention`
-
-Publica un mensaje dirigido a un agente y hace que MissionControl genere una respuesta del agente mencionado.
-
-Usalo para cosas tipo:
-
-- "Jarvis, como vamos?"
-- "Alaria revisa riesgos"
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: jarvis" \
-  -H "Idempotency-Key: mention-alaria-001" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channelId":"hq-command",
-    "content":"Alaria, revisa riesgos y dependencias del frente de voz.",
-    "agentId":"alaria"
-  }' \
-  http://127.0.0.1:3000/api/openclaw/chat/mention
-```
-
-## 5. Coordinacion entre agentes
-
-### `POST /api/openclaw/coordinate`
-
-Inicia una coordinacion entre dos agentes y produce:
-
-- thread;
-- transcript;
-- summary;
-- mensaje de sistema en `meeting-summaries`.
-
-Es la llamada para automatizar cosas como:
-
-- "Jarvis habla con Alaria sobre lo pendiente"
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: omen" \
-  -H "Idempotency-Key: coordinate-jarvis-alaria-001" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sourceChannelId":"hq-command",
-    "initiatorId":"jarvis",
-    "targetId":"alaria",
-    "topic":"Revisar pendientes para el cierre de la entrega"
-  }' \
-  http://127.0.0.1:3000/api/openclaw/coordinate
-```
-
-## 6. Resumenes
+## 4. Resumenes
 
 ### `GET /api/openclaw/summaries`
 
@@ -332,19 +371,18 @@ Crea manualmente un resumen y lo publica en el canal correspondiente.
 ```bash
 curl -X POST \
   -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: lutea" \
+  -H "X-OpenClaw-Agent-Id: jarvis" \
   -H "Idempotency-Key: summary-ops-001" \
   -H "Content-Type: application/json" \
   -d '{
     "title":"Cierre tactico de voz",
     "sourceChannelId":"meeting-summaries",
-    "participants":["Jarvis","Serapha","Lutea"],
+    "participants":["Jarvis","Comandante Vega"],
     "highlights":[
       "La tarea queda en review",
-      "Falta aprobacion final",
-      "La voz sigue bajo guardrails"
+      "Falta aprobacion final"
     ],
-    "markdown":"## Tema\nCierre tactico de voz\n\n## Acuerdos\n- Pasar a review\n- Esperar aprobacion\n- Documentar guardrails"
+    "markdown":"## Tema\nCierre tactico de voz\n\n## Acuerdos\n- Pasar a review\n- Esperar aprobacion"
   }' \
   http://127.0.0.1:3000/api/openclaw/summaries
 ```
@@ -360,27 +398,25 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `GET /api/openclaw/summaries/:summaryId/markdown`
 
-Devuelve solo el markdown del resumen, ideal para exportar o mandarlo por DM.
+Devuelve solo el markdown del resumen, ideal para exportar o mandarlo a otro canal externo.
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
   http://127.0.0.1:3000/api/openclaw/summaries/sum-1/markdown
 ```
 
-## 7. Stand-up y supervision
+## 5. Stand-up y supervision
 
 ### `GET /api/openclaw/standup`
 
 Genera el stand-up automatico actual en markdown.
-
-Usalo para publicar un resumen diario o para que un agente tome el pulso del sistema.
 
 ```bash
 curl -H "Authorization: Bearer missioncontrol-dev-key" \
   http://127.0.0.1:3000/api/openclaw/standup
 ```
 
-## 8. Presencia
+## 6. Presencia
 
 ### `GET /api/openclaw/presence`
 
@@ -393,7 +429,7 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
 
 ### `POST /api/openclaw/presence`
 
-Actualiza presencia o typing de una entidad.
+Actualiza presencia de una entidad.
 
 Valores de `mode`:
 
@@ -405,19 +441,19 @@ Valores de `mode`:
 ```bash
 curl -X POST \
   -H "Authorization: Bearer missioncontrol-dev-key" \
-  -H "X-OpenClaw-Agent-Id: nyx" \
-  -H "Idempotency-Key: presence-nyx-001" \
+  -H "X-OpenClaw-Agent-Id: jarvis" \
+  -H "Idempotency-Key: presence-jarvis-001" \
   -H "Content-Type: application/json" \
   -d '{
-    "entityId":"nyx",
+    "entityId":"jarvis",
     "mode":"focus",
-    "typing":true,
-    "channelId":"ops-war-room"
+    "typing":false,
+    "channelId":"hq-command"
   }' \
   http://127.0.0.1:3000/api/openclaw/presence
 ```
 
-## 9. Voz
+## 7. Voz
 
 ### `POST /api/openclaw/voice/session`
 
@@ -426,6 +462,7 @@ Abre o cierra una sesion de voz.
 Campos:
 
 - `agentId`: opcional, voz del agente activo;
+- `channelId`: opcional;
 - `enabled`: opcional, si es `false` desactiva voz.
 
 Abrir sesion:
@@ -474,23 +511,32 @@ curl -X POST \
 1. `GET /api/openclaw/agents/:agentId/context`
 2. `GET /api/openclaw/tasks/:taskId`
 3. `POST /api/openclaw/tasks/:taskId/transition`
-4. `POST /api/openclaw/chat/post`
 
-### Flujo: coordinacion entre dos agentes
+### Flujo: crear y cerrar tareas
 
-1. `POST /api/openclaw/coordinate`
-2. `GET /api/openclaw/summaries`
-3. `GET /api/openclaw/summaries/:summaryId/markdown`
+1. `POST /api/openclaw/tasks`
+2. `POST /api/openclaw/tasks/:taskId/transition`
+3. `POST /api/openclaw/tasks/:taskId/approve` si requiere aprobacion
+4. `POST /api/openclaw/tasks/:taskId/transition` con `closed`
 
 ### Flujo: supervisor o agente publica resumen
 
 1. `GET /api/openclaw/standup`
 2. `POST /api/openclaw/summaries`
-3. `POST /api/openclaw/chat/post`
+
+### Flujo: gestionar roster de agentes
+
+1. `GET /api/openclaw/agents`
+2. `POST /api/openclaw/agents`
+3. `PATCH /api/openclaw/agents/:agentId`
+4. `DELETE /api/openclaw/agents/:agentId`
 
 ## Notas de operacion
 
 - si falta `Authorization`, la API responde error;
 - si falta `Idempotency-Key` en escritura, la API rechaza la llamada;
-- los endpoints hoy operan sobre un store compartido en memoria del servidor;
-- el contrato ya esta listo para que luego se conecte a Prisma sin cambiar las rutas.
+- la API ya no ofrece chat ni coordinacion interna;
+- las tareas `closed` no salen en el tablero ni en el snapshot normal;
+- para ver tareas cerradas usa `GET /api/openclaw/tasks?status=closed`;
+- para conversaciones con agentes usa tu canal externo, por ejemplo Telegram;
+- MissionControl queda como centro de control operativo: tareas, agentes, resumenes, presencia y voz.

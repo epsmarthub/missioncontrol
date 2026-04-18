@@ -71,6 +71,8 @@ function fromTaskStatus(status: TaskStatus): AppTaskStatus {
       return "review";
     case TaskStatus.DONE:
       return "done";
+    case TaskStatus.CLOSED:
+      return "closed";
   }
 }
 
@@ -105,6 +107,8 @@ function toTaskStatus(status: AppTaskStatus): TaskStatus {
       return TaskStatus.REVIEW;
     case "done":
       return TaskStatus.DONE;
+    case "closed":
+      return TaskStatus.CLOSED;
   }
 }
 
@@ -219,6 +223,71 @@ export interface UpsertAgentInput {
   stats?: Partial<AgentProfile["stats"]>;
 }
 
+export interface CreateTaskInput {
+  title: string;
+  description: string;
+  priority?: Task["priority"];
+  difficulty?: Task["priority"];
+  requiresApproval?: boolean;
+  assignedAgentIds?: string[];
+  tags?: string[];
+  dueAt?: string;
+  blockedReason?: string;
+}
+
+function xpRewardForDifficulty(difficulty: Task["priority"]) {
+  switch (difficulty) {
+    case "low":
+      return 40;
+    case "medium":
+      return 80;
+    case "high":
+      return 140;
+    case "critical":
+      return 220;
+  }
+}
+
+function mapTaskRecord(
+  task: {
+    id: string;
+    title: string;
+    description: string;
+    status: TaskStatus;
+    priority: TaskPriority;
+    tags: string[];
+    xpReward: number;
+    requiresApproval: boolean;
+    dueAt: Date;
+    updatedAt: Date;
+    createdAt: Date;
+    reviewRequestedAt: Date | null;
+    completedAt: Date | null;
+    approvedAt: Date | null;
+    blockedReason: string | null;
+    assignments: Array<{ agentId: string }>;
+  },
+): Task {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: fromTaskStatus(task.status),
+    priority: fromTaskPriority(task.priority),
+    tags: task.tags,
+    xpReward: task.xpReward,
+    requiresApproval: task.requiresApproval,
+    assignedAgentIds: task.assignments.map((assignment) => assignment.agentId),
+    dueAt: task.dueAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
+    createdAt: task.createdAt.toISOString(),
+    reviewRequestedAt: task.reviewRequestedAt?.toISOString(),
+    completedAt: task.completedAt?.toISOString(),
+    approvedAt: task.approvedAt?.toISOString(),
+    blockedReason: task.blockedReason ?? undefined,
+  };
+}
+
 export async function getMissionControlSnapshotFromDb(): Promise<MissionControlSnapshot> {
   ensureDatabase();
 
@@ -291,24 +360,9 @@ export async function getMissionControlSnapshotFromDb(): Promise<MissionControlS
     channelsRaw.map((channel) => [channel.slug, rosterIds]),
   );
 
-  const tasks: Task[] = tasksRaw.map((task) => ({
-    id: task.id,
-    title: task.title,
-    description: task.description,
-    status: fromTaskStatus(task.status),
-    priority: fromTaskPriority(task.priority),
-    tags: task.tags,
-    xpReward: task.xpReward,
-    requiresApproval: task.requiresApproval,
-    assignedAgentIds: task.assignments.map((assignment) => assignment.agentId),
-    dueAt: task.dueAt.toISOString(),
-    updatedAt: task.updatedAt.toISOString(),
-    createdAt: task.createdAt.toISOString(),
-    reviewRequestedAt: task.reviewRequestedAt?.toISOString(),
-    completedAt: task.completedAt?.toISOString(),
-    approvedAt: task.approvedAt?.toISOString(),
-    blockedReason: task.blockedReason ?? undefined,
-  }));
+  const tasks: Task[] = tasksRaw
+    .filter((task) => task.status !== TaskStatus.CLOSED)
+    .map((task) => mapTaskRecord(task));
 
   const channels: MissionControlSnapshot["channels"] = channelsRaw.map((channel) => ({
     id: channel.slug,
@@ -419,6 +473,99 @@ export async function getMissionControlDashboardFromDb() {
   };
 }
 
+export async function listMissionControlTasksFromDb(options?: {
+  includeClosed?: boolean;
+  status?: AppTaskStatus;
+}) {
+  ensureDatabase();
+
+  const where =
+    options?.status
+      ? { status: toTaskStatus(options.status) }
+      : options?.includeClosed
+        ? undefined
+        : { status: { not: TaskStatus.CLOSED } };
+
+  const tasksRaw = await prisma.task.findMany({
+    where,
+    include: { assignments: true },
+    orderBy: [{ status: "asc" }, { createdAt: "asc" }],
+  });
+
+  return tasksRaw.map((task) => mapTaskRecord(task));
+}
+
+export async function getMissionControlTaskContextFromDb(taskId: string) {
+  ensureDatabase();
+
+  const [taskRaw, historyRaw, xpEventsRaw, agentsRaw] = await Promise.all([
+    prisma.task.findUnique({
+      where: { id: taskId },
+      include: { assignments: true },
+    }),
+    prisma.taskStatusHistory.findMany({
+      where: { taskId },
+      orderBy: { changedAt: "asc" },
+    }),
+    prisma.xpEvent.findMany({
+      where: { taskId },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.agentProfile.findMany({ orderBy: { name: "asc" } }),
+  ]);
+
+  if (!taskRaw) {
+    throw new Error(`No existe la tarea ${taskId}.`);
+  }
+
+  const task = mapTaskRecord(taskRaw);
+  const assignedAgents = agentsRaw
+    .filter((agent) => task.assignedAgentIds.includes(agent.id))
+    .map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      handle: agent.handle,
+      classId: fromAgentClass(agent.classId),
+      classLabel: AGENT_CLASS_CONFIG[fromAgentClass(agent.classId)].label,
+      title: agent.title,
+      level: agent.level,
+      currentXp: agent.currentXp,
+      nextLevelXp: agent.nextLevelXp,
+      specialty: agent.specialty,
+      avatarSeed: agent.avatarSeed,
+      voice: agent.voice,
+      stats: {
+        arcana: agent.statsArcana,
+        tactics: agent.statsTactics,
+        strength: agent.statsStrength,
+        agility: agent.statsAgility,
+        support: agent.statsSupport,
+      },
+      quote: agent.quote,
+    }));
+
+  return {
+    task,
+    assignedAgents,
+    history: historyRaw.map((entry) => ({
+      id: entry.id,
+      taskId: entry.taskId,
+      fromStatus: fromTaskStatus(entry.fromStatus),
+      toStatus: fromTaskStatus(entry.toStatus),
+      changedAt: entry.changedAt.toISOString(),
+      changedBy: entry.changedBy,
+    })),
+    xpEvents: xpEventsRaw.map((entry) => ({
+      id: entry.id,
+      taskId: entry.taskId,
+      agentId: entry.agentId,
+      amount: entry.amount,
+      reason: entry.reason,
+      createdAt: entry.createdAt.toISOString(),
+    })),
+  };
+}
+
 export async function transitionMissionControlTask(
   taskId: string,
   nextStatus: AppTaskStatus,
@@ -432,6 +579,10 @@ export async function transitionMissionControlTask(
       throw new Error(`No existe la tarea ${taskId}.`);
     }
 
+    if (nextStatus === "closed" && task.status !== TaskStatus.DONE) {
+      throw new Error("Solo puedes cerrar tareas que ya esten en done.");
+    }
+
     const effectiveStatus =
       nextStatus === "done" && task.requiresApproval ? ("review" as const) : nextStatus;
     const timestamp = new Date();
@@ -442,7 +593,10 @@ export async function transitionMissionControlTask(
         status: toTaskStatus(effectiveStatus),
         updatedAt: timestamp,
         reviewRequestedAt: effectiveStatus === "review" ? timestamp : task.reviewRequestedAt,
-        completedAt: effectiveStatus === "done" ? timestamp : task.completedAt,
+        completedAt:
+          effectiveStatus === "done" || effectiveStatus === "closed"
+            ? task.completedAt ?? timestamp
+            : task.completedAt,
       },
     });
 
@@ -618,6 +772,94 @@ export async function claimMissionControlTask(taskId: string, agentId: string, c
   });
 
   return getMissionControlSnapshotFromDb();
+}
+
+export async function createMissionControlTask(input: CreateTaskInput, changedBy: string) {
+  ensureDatabase();
+
+  const difficulty = input.difficulty ?? input.priority ?? "medium";
+  const priority = input.priority ?? difficulty;
+  const dueAt = input.dueAt ? new Date(input.dueAt) : new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+  if (Number.isNaN(dueAt.getTime())) {
+    throw new Error("dueAt no tiene un formato de fecha valido.");
+  }
+
+  const assignedAgentIds = Array.from(new Set(input.assignedAgentIds ?? []));
+  if (assignedAgentIds.length > 0) {
+    const existingAgents = await prisma.agentProfile.findMany({
+      where: { id: { in: assignedAgentIds } },
+      select: { id: true },
+    });
+
+    if (existingAgents.length !== assignedAgentIds.length) {
+      throw new Error("Uno o mas agentes asignados no existen.");
+    }
+  }
+
+  const timestamp = new Date();
+
+  const task = await prisma.$transaction(async (tx) => {
+    const createdTask = await tx.task.create({
+      data: {
+        id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title: input.title.trim(),
+        description: input.description.trim(),
+        status: TaskStatus.BACKLOG,
+        priority:
+          priority === "low"
+            ? TaskPriority.LOW
+            : priority === "medium"
+              ? TaskPriority.MEDIUM
+              : priority === "high"
+                ? TaskPriority.HIGH
+                : TaskPriority.CRITICAL,
+        tags: (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
+        xpReward: xpRewardForDifficulty(difficulty),
+        requiresApproval: input.requiresApproval ?? false,
+        dueAt,
+        blockedReason: input.blockedReason?.trim() || null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      include: { assignments: true },
+    });
+
+    if (assignedAgentIds.length > 0) {
+      await tx.taskAssignment.createMany({
+        data: assignedAgentIds.map((agentId) => ({
+          taskId: createdTask.id,
+          agentId,
+        })),
+      });
+    }
+
+    await tx.taskStatusHistory.create({
+      data: {
+        id: `hist-${Date.now()}-create`,
+        taskId: createdTask.id,
+        fromStatus: TaskStatus.BACKLOG,
+        toStatus: TaskStatus.BACKLOG,
+        changedBy,
+        changedAt: timestamp,
+      },
+    });
+
+    return tx.task.findUniqueOrThrow({
+      where: { id: createdTask.id },
+      include: { assignments: true },
+    });
+  });
+
+  broadcastSnapshotInvalidated({
+    reason: "task.create",
+    entityId: task.id,
+  });
+
+  return {
+    task: mapTaskRecord(task),
+    snapshot: await getMissionControlSnapshotFromDb(),
+  };
 }
 
 export async function createSummaryAndPersist(input: {

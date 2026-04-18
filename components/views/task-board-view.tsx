@@ -11,6 +11,7 @@ const labels: Record<TaskStatus, string> = {
   in_progress: "En curso",
   review: "Revision",
   done: "Hechas",
+  closed: "Cerradas",
 };
 
 export function TaskBoardView() {

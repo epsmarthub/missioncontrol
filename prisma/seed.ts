@@ -14,7 +14,7 @@ const seedMode = (process.env.MISSIONCONTROL_SEED_MODE ?? "base").toLowerCase();
 
 type DemoSnapshot = ReturnType<typeof createDemoSnapshot>;
 
-function toTaskStatus(status: DemoSnapshot["tasks"][number]["status"]) {
+function toTaskStatus(status: DemoSnapshot["tasks"][number]["status"]): TaskStatus {
   switch (status) {
     case "backlog":
       return TaskStatus.BACKLOG;
@@ -24,10 +24,12 @@ function toTaskStatus(status: DemoSnapshot["tasks"][number]["status"]) {
       return TaskStatus.REVIEW;
     case "done":
       return TaskStatus.DONE;
+    case "closed":
+      return TaskStatus.CLOSED;
   }
 }
 
-function toTaskPriority(priority: DemoSnapshot["tasks"][number]["priority"]) {
+function toTaskPriority(priority: DemoSnapshot["tasks"][number]["priority"]): TaskPriority {
   switch (priority) {
     case "low":
       return TaskPriority.LOW;
@@ -40,7 +42,7 @@ function toTaskPriority(priority: DemoSnapshot["tasks"][number]["priority"]) {
   }
 }
 
-function toChannelType(type: DemoSnapshot["channels"][number]["type"]) {
+function toChannelType(type: DemoSnapshot["channels"][number]["type"]): ChannelType {
   switch (type) {
     case "public":
       return ChannelType.PUBLIC;
@@ -53,7 +55,7 @@ function toChannelType(type: DemoSnapshot["channels"][number]["type"]) {
   }
 }
 
-function toPresenceMode(mode: DemoSnapshot["presence"][number]["mode"]) {
+function toPresenceMode(mode: DemoSnapshot["presence"][number]["mode"]): PresenceMode {
   switch (mode) {
     case "online":
       return PresenceMode.ONLINE;

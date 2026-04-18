@@ -2,14 +2,18 @@ import {
   approveMissionControlTask,
   claimMissionControlTask,
   createAgentInDb,
+  createMissionControlTask,
   createSummaryAndPersist,
   createVoiceSessionInDb,
   deleteAgentInDb,
   getMissionControlDashboardFromDb,
   getMissionControlSnapshotFromDb,
+  getMissionControlTaskContextFromDb,
+  listMissionControlTasksFromDb,
   transitionMissionControlTask,
   updateAgentInDb,
   updatePresenceInDb,
+  CreateTaskInput,
   UpsertAgentInput,
 } from "@/lib/server/missioncontrol-db";
 import { AuthorType, PresenceMode, TaskStatus } from "@/lib/types";
@@ -97,17 +101,21 @@ export async function getOpenClawAgentContext(agentId: string) {
   };
 }
 
-export async function listOpenClawTasks() {
-  return (await getOpenClawSnapshot()).tasks;
+export async function listOpenClawTasks(options?: { includeClosed?: boolean; status?: TaskStatus }) {
+  return listMissionControlTasksFromDb(options);
 }
 
 export async function getOpenClawTask(taskId: string) {
-  const task = (await getOpenClawSnapshot()).tasks.find((entry) => entry.id === taskId);
-  if (!task) {
-    throw new Error(`No existe la tarea ${taskId}.`);
-  }
+  return getMissionControlTaskContextFromDb(taskId);
+}
 
-  return task;
+export async function createOpenClawTask(input: CreateTaskInput, actor: OpenClawActor) {
+  const { task, snapshot } = await createMissionControlTask(input, actor.name);
+  return {
+    ok: true,
+    task,
+    snapshot,
+  };
 }
 
 export async function transitionOpenClawTask(taskId: string, nextStatus: TaskStatus, actor: OpenClawActor) {
@@ -276,17 +284,5 @@ export async function listOpenClawTaskAssignments(taskId: string) {
 }
 
 export async function getOpenClawTaskContext(taskId: string) {
-  const snapshot = await getOpenClawSnapshot();
-  const task = snapshot.tasks.find((entry) => entry.id === taskId);
-
-  if (!task) {
-    throw new Error(`No existe la tarea ${taskId}.`);
-  }
-
-  return {
-    task,
-    assignedAgents: snapshot.agents.filter((agent) => task.assignedAgentIds.includes(agent.id)),
-    history: snapshot.taskHistory.filter((entry) => entry.taskId === taskId),
-    xpEvents: snapshot.xpEvents.filter((entry) => entry.taskId === taskId),
-  };
+  return getMissionControlTaskContextFromDb(taskId);
 }

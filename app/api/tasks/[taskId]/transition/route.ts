@@ -3,7 +3,7 @@ import { z } from "zod";
 import { transitionMissionControlTask } from "@/lib/server/missioncontrol-db";
 
 const bodySchema = z.object({
-  nextStatus: z.enum(["backlog", "in_progress", "review", "done"]),
+  nextStatus: z.enum(["backlog", "in_progress", "review", "done", "closed"]),
 });
 
 export async function POST(

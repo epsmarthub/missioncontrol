@@ -8,7 +8,7 @@ export type AgentClassId =
   | "engineer"
   | "summoner";
 
-export type TaskStatus = "backlog" | "in_progress" | "review" | "done";
+export type TaskStatus = "backlog" | "in_progress" | "review" | "done" | "closed";
 
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 
