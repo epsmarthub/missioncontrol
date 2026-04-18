@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { generateAutomaticStandup } from "@/lib/mission-control";
 import { MeetingSummary, MissionControlSnapshot, TaskStatus } from "@/lib/types";
 
@@ -25,10 +33,147 @@ export function MissionControlProvider({
   children: React.ReactNode;
 }>) {
   const [snapshot, setSnapshot] = useState<MissionControlSnapshot>(initialSnapshot);
+  const pollingInFlightRef = useRef(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const pendingRefreshRef = useRef(false);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }, [snapshot]);
+
+  const refreshSnapshot = useCallback(async () => {
+    if (pollingInFlightRef.current) {
+      return;
+    }
+
+    pollingInFlightRef.current = true;
+
+    try {
+      const response = await fetch("/api/snapshot", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as { snapshot?: MissionControlSnapshot };
+      if (payload.snapshot) {
+        setSnapshot(payload.snapshot);
+      }
+    } catch {
+      return;
+    } finally {
+      pollingInFlightRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    let reconnectTimeoutId = 0;
+    let fallbackIntervalId = 0;
+    let disposed = false;
+
+    const connectWebSocket = () => {
+      if (disposed) {
+        return;
+      }
+
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
+      socketRef.current = socket;
+
+      socket.addEventListener("message", (event) => {
+        try {
+          const payload = JSON.parse(event.data as string) as { type?: string };
+          if (payload.type === "connection.ready") {
+            void refreshSnapshot();
+            return;
+          }
+
+          if (payload.type !== "snapshot.invalidate") {
+            return;
+          }
+
+          if (document.hidden) {
+            pendingRefreshRef.current = true;
+            return;
+          }
+
+          void refreshSnapshot();
+        } catch {
+          // noop
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (socketRef.current === socket) {
+          socketRef.current = null;
+        }
+
+        if (!disposed) {
+          reconnectTimeoutId = window.setTimeout(() => {
+            connectWebSocket();
+          }, 1500);
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        try {
+          socket.close();
+        } catch {
+          // noop
+        }
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        return;
+      }
+
+      if (
+        !socketRef.current ||
+        socketRef.current.readyState === WebSocket.CLOSING ||
+        socketRef.current.readyState === WebSocket.CLOSED
+      ) {
+        connectWebSocket();
+      }
+
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false;
+      }
+
+      void refreshSnapshot();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    connectWebSocket();
+    fallbackIntervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        void refreshSnapshot();
+      }
+    }, 8000);
+
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (reconnectTimeoutId) {
+        window.clearTimeout(reconnectTimeoutId);
+      }
+      if (fallbackIntervalId) {
+        window.clearInterval(fallbackIntervalId);
+      }
+      if (socketRef.current) {
+        try {
+          socketRef.current.close();
+        } catch {
+          // noop
+        }
+        socketRef.current = null;
+      }
+    };
+  }, [refreshSnapshot]);
 
   const moveTask = useCallback(async (taskId: string, nextStatus: TaskStatus) => {
     const response = await fetch(`/api/tasks/${taskId}/transition`, {
