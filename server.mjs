@@ -20,9 +20,12 @@ function getRealtimeState() {
 async function main() {
   const server = createServer();
   const app = next({ dev, hostname, port, httpServer: server });
+  const wss = new WebSocketServer({ noServer: true });
+
+  await app.prepare();
+
   const handle = app.getRequestHandler();
   const handleUpgrade = app.getUpgradeHandler();
-  const wss = new WebSocketServer({ noServer: true });
 
   wss.on("connection", (socket) => {
     const state = getRealtimeState();
@@ -72,8 +75,6 @@ async function main() {
       socket.destroy();
     });
   });
-
-  await app.prepare();
 
   server.listen(port, hostname, () => {
     console.log(
