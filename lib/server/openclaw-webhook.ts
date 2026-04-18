@@ -18,6 +18,46 @@ export interface OpenClawMentionWebhookPayload {
   content: string;
 }
 
+interface OpenClawNativeWebhookEnvelope {
+  action: string;
+  input: {
+    kind: "missioncontrol.agent_mentioned";
+    eventId: string;
+    timestamp: string;
+    channelId: string;
+    messageId: string;
+    content: string;
+    agent: OpenClawMentionWebhookPayload["agent"];
+    author: OpenClawMentionWebhookPayload["author"];
+    source: {
+      app: "missioncontrol";
+      event: OpenClawMentionWebhookPayload["event"];
+    };
+  };
+}
+
+function buildNativeWebhookEnvelope(
+  payload: OpenClawMentionWebhookPayload,
+): OpenClawNativeWebhookEnvelope {
+  return {
+    action: env.openclawWebhookAction,
+    input: {
+      kind: "missioncontrol.agent_mentioned",
+      eventId: payload.eventId,
+      timestamp: payload.timestamp,
+      channelId: payload.channelId,
+      messageId: payload.messageId,
+      content: payload.content,
+      agent: payload.agent,
+      author: payload.author,
+      source: {
+        app: "missioncontrol",
+        event: payload.event,
+      },
+    },
+  };
+}
+
 export async function sendOpenClawMentionWebhook(payload: OpenClawMentionWebhookPayload) {
   if (!hasOpenClawWebhook || !env.openclawWebhookUrl || !env.openclawWebhookSecret) {
     return {
@@ -40,7 +80,7 @@ export async function sendOpenClawMentionWebhook(payload: OpenClawMentionWebhook
         "Idempotency-Key": payload.eventId,
         "X-MissionControl-Event": payload.event,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(buildNativeWebhookEnvelope(payload)),
       signal: controller.signal,
       cache: "no-store",
     });

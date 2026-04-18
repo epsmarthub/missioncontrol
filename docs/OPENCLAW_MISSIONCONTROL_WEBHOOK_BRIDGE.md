@@ -89,25 +89,32 @@ Idempotency-Key: mention-msg-123-jarvis
 X-MissionControl-Event: agent.mentioned
 ```
 
-Payload inicial esperado:
+Payload inicial esperado por el webhook nativo:
 
 ```json
 {
-  "eventId": "mention-msg-123-jarvis",
-  "event": "agent.mentioned",
-  "timestamp": "2026-04-18T15:00:00.000Z",
-  "channelId": "hq-command",
-  "messageId": "msg-123",
-  "agent": {
-    "id": "jarvis",
-    "name": "Jarvis"
-  },
-  "author": {
-    "id": "user-vega",
-    "name": "Comandante Vega",
-    "type": "user"
-  },
-  "content": "Jarvis, como va la sala de voz?"
+  "action": "run_task",
+  "input": {
+    "kind": "missioncontrol.agent_mentioned",
+    "eventId": "mention-msg-123-jarvis",
+    "timestamp": "2026-04-18T15:00:00.000Z",
+    "channelId": "hq-command",
+    "messageId": "msg-123",
+    "content": "Jarvis, como va la sala de voz?",
+    "agent": {
+      "id": "jarvis",
+      "name": "Jarvis"
+    },
+    "author": {
+      "id": "user-vega",
+      "name": "Comandante Vega",
+      "type": "user"
+    },
+    "source": {
+      "app": "missioncontrol",
+      "event": "agent.mentioned"
+    }
+  }
 }
 ```
 
@@ -205,6 +212,119 @@ Usar el mecanismo normal de OpenClaw:
 - dispatch al runtime del agente
 
 El objetivo es que la respuesta venga del agente real, no de una plantilla fija.
+
+## Decision tecnica importante
+
+Si el gateway HTTP visible de OpenClaw no expone rutas como:
+
+- `/sessions/spawn`
+- `/sessions/send`
+
+entonces no conviene seguir adivinando endpoints internos del gateway.
+
+La recomendacion correcta es esta:
+
+### Opcion recomendada
+
+Ejecutar al agente real desde el bridge usando un mecanismo estable del lado OpenClaw, por ejemplo:
+
+- `openclaw agent`
+- `sessions_spawn` o `sessions_send` desde SDK interno si el bridge corre dentro del mismo runtime y tiene acceso directo
+
+### Opcion no recomendada
+
+No seguir intentando descubrir endpoints HTTP privados del gateway para lanzar agentes.
+
+Si el gateway no publica esa ruta, asumir que:
+
+- no es parte del contrato estable
+- o no esta disponible en ese despliegue
+
+## Diagnostico del cuello de botella
+
+Si el estado actual es:
+
+- MissionControl -> webhook bridge: OK
+- auth/schema/dedupe: OK
+- callback a MissionControl: OK o parcialmente OK
+- ejecucion real de agente OpenClaw: pendiente
+
+entonces el problema ya no es red ni webhook.
+
+Es un problema de integracion del runtime real del agente.
+
+## Estrategia recomendada para cerrar el runtime
+
+### Ruta A: usar `openclaw agent`
+
+Si OpenClaw ya trae CLI funcional para ejecutar agentes, esta suele ser la opcion mas robusta en un bridge Node separado.
+
+El bridge:
+
+1. recibe el webhook
+2. valida auth y dedupe
+3. obtiene contexto desde MissionControl
+4. ejecuta `openclaw agent <agentId> ...`
+5. captura stdout o resultado estructurado
+6. publica la respuesta en MissionControl
+
+Ventajas:
+
+- no depende de rutas privadas del gateway
+- no depende de endpoints HTTP no documentados
+- funciona bien cuando el bridge esta fuera del core runtime pero corre en el mismo host
+
+### Ruta B: usar `sessions_spawn` / `sessions_send` por acceso interno
+
+Solo tomar esta ruta si el bridge:
+
+- corre dentro del runtime/plugin correcto de OpenClaw
+- y ya tiene acceso real a la API interna estable del SDK
+
+En ese caso:
+
+- usar la llamada interna real
+- no envolverla en un invento HTTP externo
+
+Ventajas:
+
+- integracion mas nativa
+- mejor control de sesiones
+
+Desventaja:
+
+- depende de estar en el contexto correcto del runtime
+
+## Recomendacion final para tu agente
+
+Con el estado actual, la mejor decision es:
+
+1. dejar el webhook y el callback a MissionControl como ya estan
+2. dejar de depender de rutas HTTP adivinadas como `/sessions/spawn`
+3. cerrar la ejecucion del agente real por una de estas dos vias:
+   - `openclaw agent` si el bridge es externo
+   - `sessions_spawn` o `sessions_send` si el bridge tiene acceso interno real al SDK
+
+Si hay duda, elegir `openclaw agent` primero.
+
+## Secuencia operativa recomendada
+
+1. Webhook entra al bridge
+2. Validar auth
+3. Validar schema
+4. Revisar dedupe
+5. Consultar contexto en MissionControl
+6. Marcar presence typing=true
+7. Ejecutar el agente real con `openclaw agent` o runtime interno
+8. Publicar respuesta con `/api/openclaw/chat/post`
+9. Marcar presence typing=false
+
+## Señales de que ya esta bien resuelto
+
+- el bridge deja de devolver `webhook-http-404`
+- no se usan rutas inventadas del gateway
+- el agente responde de forma real en MissionControl
+- el bridge funciona igual aunque cambie el puerto del gateway HTTP
 
 ### Paso 6: publicar la respuesta en MissionControl
 

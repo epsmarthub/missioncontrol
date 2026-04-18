@@ -57,6 +57,7 @@ Abre `http://localhost:3000`.
 - `OPENCLAW_API_KEY`: token Bearer para agentes OpenClaw. En desarrollo usa `missioncontrol-dev-key` por defecto si no lo defines.
 - `OPENCLAW_WEBHOOK_URL`: endpoint receptor de OpenClaw para eventos emitidos por MissionControl
 - `OPENCLAW_WEBHOOK_SECRET`: secret Bearer compartido para firmar el webhook saliente
+- `OPENCLAW_WEBHOOK_ACTION`: accion que MissionControl enviara al webhook nativo de OpenClaw. Por defecto `run_task`.
 - `OPENCLAW_WEBHOOK_TIMEOUT_MS`: timeout del webhook de MissionControl hacia OpenClaw
 - `MISSIONCONTROL_SEED_MODE`: controla la semilla inicial. Usa `base` para 1 usuario + 1 agente o `demo` para poblar toda la maqueta.
 

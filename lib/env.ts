@@ -12,6 +12,7 @@ export const env = {
     (process.env.NODE_ENV !== "production" ? "missioncontrol-dev-key" : undefined),
   openclawWebhookUrl: process.env.OPENCLAW_WEBHOOK_URL,
   openclawWebhookSecret: process.env.OPENCLAW_WEBHOOK_SECRET,
+  openclawWebhookAction: process.env.OPENCLAW_WEBHOOK_ACTION ?? "run_task",
   openclawWebhookTimeoutMs: Number.parseInt(
     process.env.OPENCLAW_WEBHOOK_TIMEOUT_MS ?? "5000",
     10,
