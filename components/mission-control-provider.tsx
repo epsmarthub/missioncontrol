@@ -42,6 +42,18 @@ export function MissionControlProvider({
   const pollingInFlightRef = useRef(false);
   const socketRef = useRef<WebSocket | null>(null);
   const pendingRefreshRef = useRef(false);
+  const preferredRefreshIntervalRef = useRef(5000);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      preferredRefreshIntervalRef.current = 5000;
+      return;
+    }
+
+    const pathname = window.location.pathname;
+    const hasTypingAgents = snapshot.presence.some((entry) => entry.typing);
+    preferredRefreshIntervalRef.current = pathname === "/chat" || hasTypingAgents ? 1500 : 5000;
+  }, [snapshot.presence]);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -91,7 +103,7 @@ export function MissionControlProvider({
         }
 
         scheduleFallbackRefresh();
-      }, 30000);
+      }, preferredRefreshIntervalRef.current);
     };
 
     const connectWebSocket = () => {
@@ -106,11 +118,17 @@ export function MissionControlProvider({
 
       socket.addEventListener("open", () => {
         setRealtimeStatus("connected");
+        void refreshSnapshot();
       });
 
       socket.addEventListener("message", (event) => {
         try {
           const payload = JSON.parse(event.data as string) as { type?: string };
+          if (payload.type === "connection.ready") {
+            void refreshSnapshot();
+            return;
+          }
+
           if (payload.type !== "snapshot.invalidate") {
             return;
           }
@@ -168,7 +186,7 @@ export function MissionControlProvider({
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     connectWebSocket();
-    fallbackTimeoutId = window.setTimeout(() => {
+      fallbackTimeoutId = window.setTimeout(() => {
       if (!document.hidden) {
         void refreshSnapshot();
       }
