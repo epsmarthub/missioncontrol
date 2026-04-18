@@ -1,15 +1,12 @@
 import {
   approveMissionControlTask,
   claimMissionControlTask,
-  coordinateAgentsAndPersist,
   createAgentInDb,
   createSummaryAndPersist,
   createVoiceSessionInDb,
   deleteAgentInDb,
-  dispatchMentionAndPersist,
   getMissionControlDashboardFromDb,
   getMissionControlSnapshotFromDb,
-  postMissionControlMessage,
   transitionMissionControlTask,
   updateAgentInDb,
   updatePresenceInDb,
@@ -90,15 +87,6 @@ export async function getOpenClawAgentContext(agentId: string) {
     assignedTasks: snapshot.tasks
       .filter((task) => task.assignedAgentIds.includes(agentId))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-    activeChannels: snapshot.channels.filter((channel) => channel.members.includes(agentId)),
-    recentMessages: snapshot.messages
-      .filter(
-        (message) =>
-          message.authorId === agentId ||
-          message.mentions.includes(agentId) ||
-          message.content.toLowerCase().includes(agent.name.toLowerCase()),
-      )
-      .slice(-12),
     presence: snapshot.presence.find((entry) => entry.entityId === agentId),
     summaries: snapshot.summaries.filter((summary) => summary.participants.includes(agent.name)),
     policy: {
@@ -150,81 +138,6 @@ export async function claimOpenClawTask(taskId: string, agentId: string, actor: 
   return {
     ok: true,
     task: snapshot.tasks.find((entry) => entry.id === taskId),
-    snapshot,
-  };
-}
-
-export async function listOpenClawChannels() {
-  const snapshot = await getOpenClawSnapshot();
-  return snapshot.channels.map((channel) => ({
-    ...channel,
-    messageCount: snapshot.messages.filter((message) => message.channelId === channel.id).length,
-  }));
-}
-
-export async function getOpenClawChannelMessages(channelId: string, limit = 40) {
-  const snapshot = await getOpenClawSnapshot();
-  return snapshot.messages.filter((message) => message.channelId === channelId).slice(-limit);
-}
-
-export async function postOpenClawMessage(input: {
-  channelId: string;
-  actor: OpenClawActor;
-  content: string;
-  mentions?: string[];
-}) {
-  const snapshot = await postMissionControlMessage({
-    channelId: input.channelId,
-    authorId: input.actor.id,
-    authorName: input.actor.name,
-    authorType: input.actor.type,
-    content: input.content,
-    mentions: input.mentions ?? [],
-  });
-
-  return {
-    ok: true,
-    message: snapshot.messages.at(-1),
-    snapshot,
-  };
-}
-
-export async function createOpenClawMention(input: {
-  channelId: string;
-  actor: OpenClawActor;
-  content: string;
-  agentId: string;
-}) {
-  const result = await dispatchMentionAndPersist({
-    channelId: input.channelId,
-    message: input.content,
-    agentId: input.agentId,
-    authorId: input.actor.id,
-    authorName: input.actor.name,
-    authorType: input.actor.type,
-  });
-
-  return {
-    ok: true,
-    delivery: result.delivery,
-    requestMessage: result.snapshot.messages.at(-1),
-    replyMessage: result.delivery === "webhook" ? undefined : result.snapshot.messages.at(-1),
-    snapshot: result.snapshot,
-  };
-}
-
-export async function coordinateOpenClawAgents(input: {
-  sourceChannelId: string;
-  initiatorId: string;
-  targetId: string;
-  topic: string;
-}) {
-  const { payload, snapshot } = await coordinateAgentsAndPersist(input);
-  return {
-    ok: true,
-    thread: payload.thread,
-    transcript: payload.transcript,
-    summary: payload.summary,
     snapshot,
   };
 }

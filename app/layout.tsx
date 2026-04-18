@@ -20,7 +20,7 @@ const retroMono = VT323({
 
 export const metadata: Metadata = {
   title: "MissionControl",
-  description: "MissionControl retro SNES para tareas, agentes y supervision",
+  description: "MissionControl retro SNES para tareas, agentes, resumenes y supervision",
 };
 
 export const dynamic = "force-dynamic";

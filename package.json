@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.mjs",
+    "dev": "next dev",
     "build": "next build",
-    "start": "cross-env NODE_ENV=production node server.mjs",
+    "start": "next start",
     "lint": "eslint .",
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",

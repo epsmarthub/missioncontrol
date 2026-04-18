@@ -7,7 +7,6 @@ import {
   Bot,
   Castle,
   ClipboardList,
-  MessageSquareText,
   ShieldCheck,
   Sparkles,
   Swords,
@@ -21,7 +20,6 @@ export type SectionId =
   | "hq"
   | "task-board"
   | "agents"
-  | "chat"
   | "meeting-summaries"
   | "supervisor";
 
@@ -34,7 +32,6 @@ const navItems: Array<{
   { id: "hq", href: "/", label: "Centro HQ", icon: Castle },
   { id: "task-board", href: "/task-board", label: "Tablero", icon: ClipboardList },
   { id: "agents", href: "/agents", label: "Agentes", icon: Swords },
-  { id: "chat", href: "/chat", label: "Sala de chat", icon: MessageSquareText },
   {
     id: "meeting-summaries",
     href: "/meeting-summaries",

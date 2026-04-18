@@ -1,18 +1,18 @@
 # MissionControl
 
-MissionControl es una app web estilo SNES para supervision de trabajo, tablero de tareas, agentes RPG, chat entre agentes, resumenes de reuniones y voz opt-in.
+MissionControl es una app web estilo SNES para supervision de trabajo, tablero de tareas, agentes RPG, resumenes de reuniones y voz opt-in.
 
 ## Stack recomendado para ti
 
 - Next.js 16 + App Router
 - Tailwind CSS 4
 - Prisma + PostgreSQL local
-- OpenAI para menciones, coordinacion entre agentes y voz
+- OpenAI para voz y automatizaciones futuras
 - ZeroTier para acceso privado remoto
 
 ## Stack opcional
 
-- Supabase Auth / Realtime, solo si despues quieres login Google o presencia realtime gestionada en la nube
+- Supabase Auth, solo si despues quieres login Google gestionado en la nube
 
 ## Arquitectura local sugerida
 
@@ -34,7 +34,7 @@ Flujo simple:
 - Tailwind CSS 4
 - Prisma + PostgreSQL
 - Supabase Auth / Realtime
-- OpenAI para menciones, coordinacion entre agentes y voz
+- OpenAI para voz y automatizaciones futuras
 
 ## Arranque rapido
 
@@ -55,10 +55,6 @@ Abre `http://localhost:3000`.
 - `OPENAI_REALTIME_MODEL`: por defecto `gpt-realtime`
 - `OPENAI_TTS_MODEL`: por defecto `gpt-4o-mini-tts`
 - `OPENCLAW_API_KEY`: token Bearer para agentes OpenClaw. En desarrollo usa `missioncontrol-dev-key` por defecto si no lo defines.
-- `OPENCLAW_WEBHOOK_URL`: endpoint receptor de OpenClaw para eventos emitidos por MissionControl
-- `OPENCLAW_WEBHOOK_SECRET`: secret Bearer compartido para firmar el webhook saliente
-- `OPENCLAW_WEBHOOK_ACTION`: accion que MissionControl enviara al webhook nativo de OpenClaw. Por defecto `run_task`.
-- `OPENCLAW_WEBHOOK_TIMEOUT_MS`: timeout del webhook de MissionControl hacia OpenClaw
 - `MISSIONCONTROL_SEED_MODE`: controla la semilla inicial. Usa `base` para 1 usuario + 1 agente o `demo` para poblar toda la maqueta.
 
 Variables opcionales si mantienes Supabase:
@@ -85,7 +81,6 @@ Si faltan credenciales, la app sigue funcionando con datos seed en memoria/local
 
 - tablero y progresion EXP
 - roster de agentes
-- chat con respuestas demo
 - resumenes markdown
 - toggle de voz con token demo
 
@@ -106,7 +101,7 @@ En esta modalidad:
 - Supabase no es obligatorio;
 - la API OpenClaw sigue funcionando;
 - ZeroTier hace de capa de acceso privado;
-- OpenAI sigue siendo opcional si quieres modo demo o respuestas fallback.
+- OpenAI sigue siendo opcional si quieres modo demo o voz mas adelante.
 
 ## Actualizar una instalacion Linux existente
 
@@ -148,11 +143,6 @@ npm run build
 npm run start
 ```
 
-Nota:
-
-- el arranque productivo ahora usa un custom server Node para soportar WebSocket en `/ws`;
-- si algun dia pones Nginx o Apache delante, debes permitir `Upgrade` y `Connection: upgrade` para WebSocket.
-
 Si quieres dejarlo persistente como servicio del sistema, usa el template:
 
 - [ops/systemd/missioncontrol.service.example](/G:/Proyectos%20Reat/MissionControl/ops/systemd/missioncontrol.service.example)
@@ -160,8 +150,6 @@ Si quieres dejarlo persistente como servicio del sistema, usa el template:
 ## Endpoints incluidos
 
 - `GET /api/standup`
-- `POST /api/chat/mention`
-- `POST /api/agents/coordinate`
 - `POST /api/voice/session`
 - `POST /api/voice/tts`
 - `POST /api/tasks/:taskId/transition`
@@ -185,11 +173,6 @@ Namespace completo para agentes externos:
 - `POST /api/openclaw/tasks/:taskId/claim`
 - `POST /api/openclaw/tasks/:taskId/transition`
 - `POST /api/openclaw/tasks/:taskId/approve`
-- `GET /api/openclaw/channels`
-- `GET /api/openclaw/channels/:channelId/messages`
-- `POST /api/openclaw/chat/post`
-- `POST /api/openclaw/chat/mention`
-- `POST /api/openclaw/coordinate`
 - `GET /api/openclaw/summaries`
 - `POST /api/openclaw/summaries`
 - `GET /api/openclaw/summaries/:summaryId`

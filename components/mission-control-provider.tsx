@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { generateAutomaticStandup } from "@/lib/mission-control";
 import { MeetingSummary, MissionControlSnapshot, TaskStatus } from "@/lib/types";
 
@@ -16,12 +8,8 @@ const STORAGE_KEY = "missioncontrol.snapshot.v2";
 
 interface MissionControlContextValue {
   snapshot: MissionControlSnapshot;
-  activeChannelId: string;
-  realtimeStatus: "connecting" | "connected" | "reconnecting";
-  setActiveChannelId: (channelId: string) => void;
   moveTask: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
   approveTask: (taskId: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
   exportSummary: (summary: MeetingSummary) => void;
   toggleVoiceForChannel: (channelId: string) => Promise<void>;
   standupMarkdown: string;
@@ -37,181 +25,10 @@ export function MissionControlProvider({
   children: React.ReactNode;
 }>) {
   const [snapshot, setSnapshot] = useState<MissionControlSnapshot>(initialSnapshot);
-  const [activeChannelId, setActiveChannelId] = useState("hq-command");
-  const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "reconnecting">("connecting");
-  const pollingInFlightRef = useRef(false);
-  const socketRef = useRef<WebSocket | null>(null);
-  const pendingRefreshRef = useRef(false);
-  const preferredRefreshIntervalRef = useRef(5000);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      preferredRefreshIntervalRef.current = 5000;
-      return;
-    }
-
-    const pathname = window.location.pathname;
-    const hasTypingAgents = snapshot.presence.some((entry) => entry.typing);
-    preferredRefreshIntervalRef.current = pathname === "/chat" || hasTypingAgents ? 1500 : 5000;
-  }, [snapshot.presence]);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }, [snapshot]);
-
-  const refreshSnapshot = useCallback(async () => {
-    if (pollingInFlightRef.current) {
-      return;
-    }
-
-    pollingInFlightRef.current = true;
-
-    try {
-      const response = await fetch("/api/snapshot", {
-        method: "GET",
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        return;
-      }
-
-      const payload = (await response.json()) as { snapshot?: MissionControlSnapshot };
-      if (payload.snapshot) {
-        setSnapshot(payload.snapshot);
-      }
-    } catch {
-      return;
-    } finally {
-      pollingInFlightRef.current = false;
-    }
-  }, []);
-
-  useEffect(() => {
-    let reconnectTimeoutId: number | null = null;
-    let fallbackTimeoutId: number | null = null;
-    let disposed = false;
-
-    const scheduleFallbackRefresh = () => {
-      if (disposed) {
-        return;
-      }
-
-      fallbackTimeoutId = window.setTimeout(() => {
-        if (!document.hidden) {
-          void refreshSnapshot();
-        }
-
-        scheduleFallbackRefresh();
-      }, preferredRefreshIntervalRef.current);
-    };
-
-    const connectWebSocket = () => {
-      if (disposed) {
-        return;
-      }
-
-      setRealtimeStatus(socketRef.current ? "reconnecting" : "connecting");
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
-      socketRef.current = socket;
-
-      socket.addEventListener("open", () => {
-        setRealtimeStatus("connected");
-        void refreshSnapshot();
-      });
-
-      socket.addEventListener("message", (event) => {
-        try {
-          const payload = JSON.parse(event.data as string) as { type?: string };
-          if (payload.type === "connection.ready") {
-            void refreshSnapshot();
-            return;
-          }
-
-          if (payload.type !== "snapshot.invalidate") {
-            return;
-          }
-
-          if (document.hidden) {
-            pendingRefreshRef.current = true;
-            return;
-          }
-
-          void refreshSnapshot();
-        } catch {
-          // noop
-        }
-      });
-
-      socket.addEventListener("close", () => {
-        if (socketRef.current === socket) {
-          socketRef.current = null;
-        }
-
-        if (!disposed) {
-          setRealtimeStatus("reconnecting");
-          reconnectTimeoutId = window.setTimeout(() => {
-            connectWebSocket();
-          }, 1500);
-        }
-      });
-
-      socket.addEventListener("error", () => {
-        try {
-          socket.close();
-        } catch {
-          // noop
-        }
-      });
-    };
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        if (
-          !socketRef.current ||
-          socketRef.current.readyState === WebSocket.CLOSING ||
-          socketRef.current.readyState === WebSocket.CLOSED
-        ) {
-          connectWebSocket();
-        }
-
-        if (pendingRefreshRef.current) {
-          pendingRefreshRef.current = false;
-        }
-
-        void refreshSnapshot();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    connectWebSocket();
-      fallbackTimeoutId = window.setTimeout(() => {
-      if (!document.hidden) {
-        void refreshSnapshot();
-      }
-      scheduleFallbackRefresh();
-    }, 0);
-
-    return () => {
-      disposed = true;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (reconnectTimeoutId !== null) {
-        window.clearTimeout(reconnectTimeoutId);
-      }
-      if (fallbackTimeoutId !== null) {
-        window.clearTimeout(fallbackTimeoutId);
-      }
-      if (socketRef.current) {
-        try {
-          socketRef.current.close();
-        } catch {
-          // noop
-        }
-        socketRef.current = null;
-      }
-    };
-  }, [refreshSnapshot]);
 
   const moveTask = useCallback(async (taskId: string, nextStatus: TaskStatus) => {
     const response = await fetch(`/api/tasks/${taskId}/transition`, {
@@ -244,86 +61,6 @@ export function MissionControlProvider({
       setSnapshot(payload.snapshot);
     }
   }, []);
-
-  const sendMessage = useCallback(async (content: string) => {
-    const coordinationMatch = content
-      .toLowerCase()
-      .match(/(jarvis|alaria|brakka).*habla con.*(jarvis|alaria|brakka)/i);
-
-    if (coordinationMatch) {
-      const initiator = coordinationMatch[1].toLowerCase();
-      const target = coordinationMatch[2].toLowerCase();
-
-      const response = await fetch("/api/agents/coordinate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceChannelId: activeChannelId,
-          initiatorId: initiator,
-          targetId: target,
-          topic: content,
-        }),
-      });
-
-      if (response.ok) {
-        const payload = (await response.json()) as { snapshot?: MissionControlSnapshot };
-        if (payload.snapshot) {
-          setSnapshot(payload.snapshot);
-        }
-      }
-
-      return;
-    }
-
-    const mentions = snapshot.agents
-      .filter((agent) => content.toLowerCase().includes(agent.name.toLowerCase()))
-      .map((agent) => agent.id);
-
-    if (mentions.length > 0) {
-      const agentId = mentions[0];
-
-      try {
-        const response = await fetch("/api/chat/mention", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            channelId: activeChannelId,
-            message: content,
-            agentId,
-          }),
-        });
-
-        if (response.ok) {
-          const payload = (await response.json()) as { snapshot?: MissionControlSnapshot };
-          if (payload.snapshot) {
-            setSnapshot(payload.snapshot);
-          }
-        }
-      } catch {
-        return;
-      }
-
-      return;
-    }
-
-    const response = await fetch("/api/chat/post", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        channelId: activeChannelId,
-        content,
-      }),
-    });
-
-    if (!response.ok) {
-      return;
-    }
-
-    const payload = (await response.json()) as { snapshot?: MissionControlSnapshot };
-    if (payload.snapshot) {
-      setSnapshot(payload.snapshot);
-    }
-  }, [activeChannelId, snapshot]);
 
   const exportSummary = useCallback((summary: MeetingSummary) => {
     const blob = new Blob([summary.markdown], { type: "text/markdown;charset=utf-8" });
@@ -397,27 +134,13 @@ export function MissionControlProvider({
   const value = useMemo<MissionControlContextValue>(
     () => ({
       snapshot,
-      activeChannelId,
-      realtimeStatus,
-      setActiveChannelId,
       moveTask,
       approveTask,
-      sendMessage,
       exportSummary,
       toggleVoiceForChannel,
       standupMarkdown,
     }),
-    [
-      activeChannelId,
-      approveTask,
-      exportSummary,
-      moveTask,
-      realtimeStatus,
-      sendMessage,
-      snapshot,
-      standupMarkdown,
-      toggleVoiceForChannel,
-    ],
+    [approveTask, exportSummary, moveTask, snapshot, standupMarkdown, toggleVoiceForChannel],
   );
 
   return (
