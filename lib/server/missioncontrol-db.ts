@@ -235,6 +235,18 @@ export interface CreateTaskInput {
   blockedReason?: string;
 }
 
+export interface UpdateTaskInput {
+  title?: string;
+  description?: string;
+  priority?: Task["priority"];
+  difficulty?: Task["priority"];
+  requiresApproval?: boolean;
+  assignedAgentIds?: string[];
+  tags?: string[];
+  dueAt?: string;
+  blockedReason?: string | null;
+}
+
 function xpRewardForDifficulty(difficulty: Task["priority"]) {
   switch (difficulty) {
     case "low":
@@ -858,6 +870,166 @@ export async function createMissionControlTask(input: CreateTaskInput, changedBy
 
   return {
     task: mapTaskRecord(task),
+    snapshot: await getMissionControlSnapshotFromDb(),
+  };
+}
+
+export async function updateMissionControlTask(
+  taskId: string,
+  input: UpdateTaskInput,
+  changedBy: string,
+) {
+  ensureDatabase();
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { assignments: true },
+  });
+
+  if (!task) {
+    throw new Error(`No existe la tarea ${taskId}.`);
+  }
+
+  const updateData: {
+    title?: string;
+    description?: string;
+    priority?: TaskPriority;
+    xpReward?: number;
+    requiresApproval?: boolean;
+    tags?: string[];
+    dueAt?: Date;
+    blockedReason?: string | null;
+    updatedAt: Date;
+  } = {
+    updatedAt: new Date(),
+  };
+
+  if (input.title !== undefined) {
+    const title = input.title.trim();
+    if (!title) {
+      throw new Error("El titulo no puede estar vacio.");
+    }
+    updateData.title = title;
+  }
+
+  if (input.description !== undefined) {
+    const description = input.description.trim();
+    if (!description) {
+      throw new Error("La descripcion no puede estar vacia.");
+    }
+    updateData.description = description;
+  }
+
+  if (input.priority !== undefined) {
+    updateData.priority =
+      input.priority === "low"
+        ? TaskPriority.LOW
+        : input.priority === "medium"
+          ? TaskPriority.MEDIUM
+          : input.priority === "high"
+            ? TaskPriority.HIGH
+            : TaskPriority.CRITICAL;
+  }
+
+  if (input.difficulty !== undefined) {
+    updateData.xpReward = xpRewardForDifficulty(input.difficulty);
+  }
+
+  if (input.requiresApproval !== undefined) {
+    updateData.requiresApproval = input.requiresApproval;
+  }
+
+  if (input.tags !== undefined) {
+    updateData.tags = input.tags.map((tag) => tag.trim()).filter(Boolean);
+  }
+
+  if (input.dueAt !== undefined) {
+    const dueAt = new Date(input.dueAt);
+    if (Number.isNaN(dueAt.getTime())) {
+      throw new Error("dueAt no tiene un formato de fecha valido.");
+    }
+    updateData.dueAt = dueAt;
+  }
+
+  if (input.blockedReason !== undefined) {
+    updateData.blockedReason = input.blockedReason?.trim() || null;
+  }
+
+  if (input.assignedAgentIds !== undefined) {
+    const assignedAgentIds = Array.from(new Set(input.assignedAgentIds));
+    if (assignedAgentIds.length > 0) {
+      const existingAgents = await prisma.agentProfile.findMany({
+        where: { id: { in: assignedAgentIds } },
+        select: { id: true },
+      });
+
+      if (existingAgents.length !== assignedAgentIds.length) {
+        throw new Error("Uno o mas agentes asignados no existen.");
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: taskId },
+        data: updateData,
+      });
+
+      await tx.taskAssignment.deleteMany({
+        where: { taskId },
+      });
+
+      if (assignedAgentIds.length > 0) {
+        await tx.taskAssignment.createMany({
+          data: assignedAgentIds.map((agentId) => ({
+            taskId,
+            agentId,
+          })),
+        });
+      }
+
+      await tx.taskStatusHistory.create({
+        data: {
+          id: `hist-${Date.now()}-update`,
+          taskId,
+          fromStatus: task.status,
+          toStatus: task.status,
+          changedBy,
+          changedAt: new Date(),
+        },
+      });
+    });
+  } else {
+    await prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: taskId },
+        data: updateData,
+      });
+
+      await tx.taskStatusHistory.create({
+        data: {
+          id: `hist-${Date.now()}-update`,
+          taskId,
+          fromStatus: task.status,
+          toStatus: task.status,
+          changedBy,
+          changedAt: new Date(),
+        },
+      });
+    });
+  }
+
+  const updatedTask = await prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    include: { assignments: true },
+  });
+
+  broadcastSnapshotInvalidated({
+    reason: "task.update",
+    entityId: taskId,
+  });
+
+  return {
+    task: mapTaskRecord(updatedTask),
     snapshot: await getMissionControlSnapshotFromDb(),
   };
 }

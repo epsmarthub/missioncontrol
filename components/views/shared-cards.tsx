@@ -178,12 +178,12 @@ export function TaskHoverCard({
         }}
         onDragEnd={onDragEnd}
         className={cn(
-          "flex w-full flex-col items-start gap-2 rounded-[18px] border px-3 py-3 text-left transition-all focus:outline-none",
+          "flex w-full flex-col items-start gap-2.5 rounded-[18px] border px-3 py-3.5 text-left transition-all focus:outline-none",
           getPriorityCardClass(task.priority),
           dragging && "opacity-45 scale-[0.98]",
         )}
       >
-        <p className="w-full text-xs uppercase leading-[1.15] tracking-[0.1em] text-white sm:text-sm">
+        <p className="w-full text-[10px] uppercase leading-[1.28] tracking-[0.05em] text-white sm:text-[11px]">
           {task.title}
         </p>
         <div className="flex w-full items-center justify-between gap-2">
@@ -195,8 +195,8 @@ export function TaskHoverCard({
       </button>
 
       <div className="pointer-events-none invisible absolute left-0 top-[calc(100%-2px)] z-30 w-[min(320px,calc(100vw-3rem))] translate-y-2 rounded-[18px] border border-cyan-300/35 bg-[#171427]/96 p-3 opacity-0 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm transition-all duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
-        <div className="space-y-2">
-          <p className="text-xs uppercase leading-[1.15] tracking-[0.12em] text-white sm:text-sm">
+        <div className="space-y-2.5">
+          <p className="text-[10px] uppercase leading-[1.28] tracking-[0.06em] text-white sm:text-[11px]">
             {task.title}
           </p>
           <div className="flex items-center justify-between gap-2">

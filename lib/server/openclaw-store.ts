@@ -12,8 +12,10 @@ import {
   listMissionControlTasksFromDb,
   transitionMissionControlTask,
   updateAgentInDb,
+  updateMissionControlTask,
   updatePresenceInDb,
   CreateTaskInput,
+  UpdateTaskInput,
   UpsertAgentInput,
 } from "@/lib/server/missioncontrol-db";
 import { AuthorType, PresenceMode, TaskStatus } from "@/lib/types";
@@ -111,6 +113,15 @@ export async function getOpenClawTask(taskId: string) {
 
 export async function createOpenClawTask(input: CreateTaskInput, actor: OpenClawActor) {
   const { task, snapshot } = await createMissionControlTask(input, actor.name);
+  return {
+    ok: true,
+    task,
+    snapshot,
+  };
+}
+
+export async function updateOpenClawTask(taskId: string, input: UpdateTaskInput, actor: OpenClawActor) {
+  const { task, snapshot } = await updateMissionControlTask(taskId, input, actor.name);
   return {
     ok: true,
     task,

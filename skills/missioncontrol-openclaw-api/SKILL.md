@@ -304,6 +304,46 @@ curl -H "Authorization: Bearer missioncontrol-dev-key" \
   http://127.0.0.1:3000/api/openclaw/tasks/task-voice-optin
 ```
 
+### `PATCH /api/openclaw/tasks/:taskId`
+
+Edita una mision existente.
+
+Campos editables:
+
+- `title`
+- `description`
+- `priority`
+- `difficulty`
+- `requiresApproval`
+- `assignedAgentIds`
+- `tags`
+- `dueAt`
+- `blockedReason`
+
+Notas:
+
+- si envias `difficulty`, MissionControl recalcula el `xpReward`;
+- `assignedAgentIds` reemplaza la asignacion actual completa;
+- `blockedReason: null` limpia el bloqueo;
+- `status` no se edita aqui, para eso usa `transition`.
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer missioncontrol-dev-key" \
+  -H "X-OpenClaw-Agent-Id: jarvis" \
+  -H "Idempotency-Key: update-task-ops-map-001" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title":"Preparar tablero semanal v2",
+    "description":"Reordenar y ajustar las misiones operativas de la semana.",
+    "dueAt":"2026-04-25T18:00:00.000Z",
+    "difficulty":"high",
+    "assignedAgentIds":["jarvis"],
+    "blockedReason":null
+  }' \
+  http://127.0.0.1:3000/api/openclaw/tasks/task-ops-map
+```
+
 ### `POST /api/openclaw/tasks/:taskId/claim`
 
 Asigna un aventurero adicional a la mision.
@@ -521,9 +561,10 @@ curl -X POST \
 ### Flujo: crear y cerrar misiones
 
 1. `POST /api/openclaw/tasks`
-2. `POST /api/openclaw/tasks/:taskId/transition`
-3. `POST /api/openclaw/tasks/:taskId/approve` si requiere aprobacion
-4. `POST /api/openclaw/tasks/:taskId/transition` con `closed`
+2. `PATCH /api/openclaw/tasks/:taskId` si necesitas ajustar fecha, asignacion o dificultad
+3. `POST /api/openclaw/tasks/:taskId/transition`
+4. `POST /api/openclaw/tasks/:taskId/approve` si requiere aprobacion
+5. `POST /api/openclaw/tasks/:taskId/transition` con `closed`
 
 ### Flujo: supervisor o agente publica resumen
 
