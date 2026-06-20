@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties, HTMLAttributes } from "react";
 import { AgentProfile, Task, TaskStatus } from "@/lib/types";
 import { cn, formatRelativeDate } from "@/lib/utils";
 import { AgentPortrait, Avatar, ExpBar } from "@/components/ui-shell";
@@ -154,33 +155,34 @@ export function TaskHoverCard({
   agentNames,
   onMove,
   onApprove,
-  onDragStart,
-  onDragEnd,
   dragging = false,
+  dragActive = false,
+  cardRef,
+  dragHandleProps,
+  style,
 }: Readonly<{
   task: Task;
   agentNames: string[];
   onMove: (taskId: string, nextStatus: TaskStatus) => void;
   onApprove: (taskId: string) => void;
-  onDragStart?: (taskId: string) => void;
-  onDragEnd?: () => void;
   dragging?: boolean;
+  dragActive?: boolean;
+  cardRef?: (element: HTMLDivElement | null) => void;
+  dragHandleProps?: HTMLAttributes<HTMLDivElement>;
+  style?: CSSProperties;
 }>) {
   return (
     <div className="group relative">
-      <button
-        type="button"
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData("text/task-id", task.id);
-          event.dataTransfer.effectAllowed = "move";
-          onDragStart?.(task.id);
-        }}
-        onDragEnd={onDragEnd}
+      <div
+        ref={cardRef}
+        role="button"
+        tabIndex={0}
+        style={style}
+        {...dragHandleProps}
         className={cn(
-          "flex w-full flex-col items-start gap-2.5 rounded-[18px] border px-3 py-3.5 text-left transition-all focus:outline-none",
+          "flex w-full touch-none cursor-grab select-none flex-col items-start gap-2.5 rounded-[18px] border px-3 py-3.5 text-left focus:outline-none active:cursor-grabbing",
           getPriorityCardClass(task.priority),
-          dragging && "opacity-45 scale-[0.98]",
+          dragging && "scale-[0.98] opacity-70 ring-2 ring-cyan-300/40",
         )}
       >
         <p className="w-full text-[10px] uppercase leading-[1.28] tracking-[0.05em] text-white sm:text-[11px]">
@@ -192,9 +194,14 @@ export function TaskHoverCard({
             {task.xpReward} EXP
           </span>
         </div>
-      </button>
+      </div>
 
-      <div className="pointer-events-none invisible absolute left-0 top-[calc(100%-2px)] z-30 w-[min(320px,calc(100vw-3rem))] translate-y-2 rounded-[18px] border border-cyan-300/35 bg-[#171427]/96 p-3 opacity-0 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm transition-all duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
+      <div
+        className={cn(
+          "pointer-events-none invisible absolute left-0 top-[calc(100%-2px)] z-30 w-[min(320px,calc(100vw-3rem))] translate-y-2 rounded-[18px] border border-cyan-300/35 bg-[#171427]/96 p-3 opacity-0 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm transition-all duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100",
+          dragActive && "pointer-events-none invisible opacity-0",
+        )}
+      >
         <div className="space-y-2.5">
           <p className="text-[10px] uppercase leading-[1.28] tracking-[0.06em] text-white sm:text-[11px]">
             {task.title}
