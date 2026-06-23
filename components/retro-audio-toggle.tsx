@@ -5,64 +5,36 @@ import { Volume2, VolumeX } from "lucide-react";
 
 const STORAGE_KEY = "missioncontrol.retro-audio.enabled";
 const VOLUME_KEY = "missioncontrol.retro-audio.volume";
-
-const melody = [
-  392, 440, 523.25, 587.33, 523.25, 659.25, 587.33, 523.25, 440, 392, 349.23,
-  392,
-];
-const bass = [98, 98, 110, 123.47, 130.81, 123.47, 110, 98, 87.31, 98, 110, 123.47];
-const harmony = [196, 220, 261.63, 293.66, 261.63, 329.63, 293.66, 261.63, 220, 196, 174.61, 196];
+const AUDIO_SRC = "/arcade-ahri.mp3";
 
 export function RetroAudioToggle() {
   const enabled = useSyncExternalStore(subscribeAudioPreferences, readEnabledPreference, () => false);
   const volume = useSyncExternalStore(subscribeAudioPreferences, readVolumePreference, () => 0.4);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const loopTimerRef = useRef<number | null>(null);
-  const stepRef = useRef(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const stopAudio = useCallback(() => {
-    if (loopTimerRef.current !== null) {
-      window.clearTimeout(loopTimerRef.current);
-      loopTimerRef.current = null;
-    }
-
-    if (audioContextRef.current && audioContextRef.current.state === "running") {
-      void audioContextRef.current.suspend();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
   }, []);
 
-  const startAudio = useCallback(async () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new window.AudioContext();
+  const startAudio = useCallback(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio(AUDIO_SRC);
+      audioRef.current.loop = true;
     }
 
-    const context = audioContextRef.current;
+    audioRef.current.volume = volume;
 
-    if (context.state === "suspended") {
-      await context.resume();
+    if (audioRef.current.paused) {
+      void audioRef.current.play();
     }
-
-    if (loopTimerRef.current !== null) {
-      return;
-    }
-
-    const tick = () => {
-      const note = melody[stepRef.current % melody.length];
-      const bassNote = bass[stepRef.current % bass.length];
-      const harmonyNote = harmony[stepRef.current % harmony.length];
-      playTone(context, note, 0.18, "square", 0.028 * volume);
-      playTone(context, harmonyNote, 0.22, "triangle", 0.018 * volume);
-      playTone(context, bassNote, 0.32, "triangle", 0.022 * volume);
-      stepRef.current = (stepRef.current + 1) % melody.length;
-      loopTimerRef.current = window.setTimeout(tick, 360);
-    };
-
-    tick();
   }, [volume]);
 
   useEffect(() => {
     if (enabled) {
-      void startAudio();
+      startAudio();
     } else {
       stopAudio();
     }
@@ -71,6 +43,12 @@ export function RetroAudioToggle() {
       stopAudio();
     };
   }, [enabled, startAudio, stopAudio]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
 
   return (
     <div className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0a1223]/80 px-3 py-2 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur-sm">
@@ -168,22 +146,4 @@ function writeAudioPreferences(next: Partial<{ enabled: boolean; volume: number 
   window.dispatchEvent(new Event("missioncontrol-audio-change"));
 }
 
-function playTone(
-  context: AudioContext,
-  frequency: number,
-  duration: number,
-  type: OscillatorType,
-  gainAmount: number,
-) {
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.type = type;
-  oscillator.frequency.value = frequency;
-  gain.gain.setValueAtTime(0.0001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(gainAmount, context.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration);
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + duration);
-}
+
