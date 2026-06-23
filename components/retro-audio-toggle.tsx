@@ -25,12 +25,10 @@ export function RetroAudioToggle() {
       audioRef.current.loop = true;
     }
 
-    audioRef.current.volume = volume;
-
     if (audioRef.current.paused) {
       void audioRef.current.play();
     }
-  }, [volume]);
+  }, []);
 
   useEffect(() => {
     if (enabled) {
