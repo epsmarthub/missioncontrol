@@ -1,0 +1,18 @@
+name: Deploy MissionControl to Coolify
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deployment
+        env:
+          COOLIFY_DEPLOY_HOOK: ${{ secrets.COOLIFY_DEPLOY_HOOK }}
+        run: >-
+          curl --fail --silent --show-error --retry 3 --retry-all-errors
+          --connect-timeout 15 --max-time 60
+          "$COOLIFY_DEPLOY_HOOK"
