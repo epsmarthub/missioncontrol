@@ -179,8 +179,9 @@ function playTone(
   const gain = context.createGain();
   oscillator.type = type;
   oscillator.frequency.value = frequency;
+  const safeGainAmount = Math.max(gainAmount, 0.0001);
   gain.gain.setValueAtTime(0.0001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(gainAmount, context.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(safeGainAmount, context.currentTime + 0.02);
   gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration);
   oscillator.connect(gain);
   gain.connect(context.destination);

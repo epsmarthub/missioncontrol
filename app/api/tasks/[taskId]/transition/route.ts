@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createDemoSnapshot } from "@/lib/demo-data";
+import { hasDatabase } from "@/lib/env";
 import { transitionMissionControlTask } from "@/lib/server/missioncontrol-db";
 
 const bodySchema = z.object({
@@ -13,6 +15,19 @@ export async function POST(
   try {
     const { taskId } = await context.params;
     const body = bodySchema.parse(await request.json());
+
+    if (!hasDatabase) {
+      const snapshot = createDemoSnapshot();
+      snapshot.tasks = snapshot.tasks.map((task) =>
+        task.id === taskId ? { ...task, status: body.nextStatus } : task,
+      );
+
+      return NextResponse.json({
+        ok: true,
+        snapshot,
+      });
+    }
+
     const snapshot = await transitionMissionControlTask(taskId, body.nextStatus, "Commander Vega");
 
     return NextResponse.json({
