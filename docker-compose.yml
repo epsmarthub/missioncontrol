@@ -34,6 +34,13 @@ services:
       OPENAI_TTS_MODEL: ${OPENAI_TTS_MODEL:-gpt-4o-mini-tts}
     expose:
       - "3000"
+    networks:
+      - default
+      - coolify
 
 volumes:
   missioncontrol_pgdata:
+
+networks:
+  coolify:
+    external: true
