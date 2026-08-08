@@ -12,7 +12,9 @@ jobs:
       - name: Trigger Coolify deployment
         env:
           COOLIFY_DEPLOY_HOOK: ${{ secrets.COOLIFY_DEPLOY_HOOK }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
         run: >-
           curl --fail --silent --show-error --retry 3 --retry-all-errors
           --connect-timeout 15 --max-time 60
+          -H "Authorization: Bearer $COOLIFY_API_TOKEN"
           "$COOLIFY_DEPLOY_HOOK"
